@@ -124,6 +124,38 @@ async function fetchPage(url: string): Promise<string | null> {
   }
 }
 
+// ─── Google Search ─────────────────────────────────────────────────────────
+async function searchGoogle(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+  try {
+    const encoded = encodeURIComponent(query);
+    const { status, data } = await httpsGet(`https://www.google.com/search?q=${encoded}&num=10&hl=en`, 20000);
+    if (status !== 200) return [];
+    return parseGoogleResults(data);
+  } catch {
+    return [];
+  }
+}
+
+function parseGoogleResults(html: string): { title: string; url: string; snippet: string }[] {
+  if (html.includes("unusual traffic") || html.includes("captcha")) return [];
+  const $ = cheerio.load(html);
+  const results: { title: string; url: string; snippet: string }[] = [];
+
+  $("div.g, div[data-hveid]").each((_, el) => {
+    const $el = $(el);
+    const linkEl = $el.find("a[href^='http']").first();
+    const url = linkEl.attr("href") || "";
+    const title = $el.find("h3").first().text().trim();
+    const snippet = $el.find("div[data-sncf], span.aCOpRe, div.VwiC3b").first().text().trim();
+
+    if (url && !url.includes("google.com") && title) {
+      results.push({ title, url, snippet });
+    }
+  });
+
+  return results.slice(0, 10);
+}
+
 // ─── Brave Search ───────────────────────────────────────────────────────────
 async function searchBrave(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
   try {
@@ -194,12 +226,18 @@ async function searchSearxng(query: string): Promise<{ title: string; url: strin
 }
 
 async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+  // Google first
+  const googleResults = await searchGoogle(query);
+  if (googleResults.length > 0) return googleResults;
+
+  // Brave fallback
   for (let attempt = 0; attempt < 2; attempt++) {
     const results = await searchBrave(query);
     if (results.length > 0) return results;
     await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
   }
-  // Fallback to SearXNG
+
+  // SearXNG fallback
   return searchSearxng(query);
 }
 

@@ -76,7 +76,6 @@ const INDUSTRIES = [
 ];
 
 const CACHE_KEY = "bizintel_profiles";
-const HISTORY_KEY = "bizintel_history";
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 interface CachedEntry {
@@ -130,19 +129,6 @@ function saveCache(entries: CachedEntry[]) {
   localStorage.setItem(CACHE_KEY, JSON.stringify(entries));
 }
 
-function loadHistory(): HistoryItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(items: HistoryItem[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
-}
-
 function getCachedProfiles(city: string, industry: string): Record<string, unknown>[] | null {
   const cache = loadCache();
   const entry = cache.find(
@@ -163,30 +149,16 @@ function setCachedProfiles(city: string, industry: string, profiles: Record<stri
   saveCache(cache);
 }
 
-function addHistoryItem(city: string, industry: string, status: string) {
-  const history = loadHistory();
-  history.unshift({
-    id: crypto.randomUUID(),
-    query: `${industry} in ${city}`,
-    city,
-    industry,
-    status,
-    createdAt: new Date().toISOString(),
-  });
-  saveHistory(history.slice(0, 50));
-}
-
 function computeStats(): Stats {
   const cache = loadCache();
   const allProfiles: Record<string, unknown>[] = [];
   for (const entry of cache) {
     allProfiles.push(...entry.profiles);
   }
-  const history = loadHistory();
 
   const totalBusinesses = allProfiles.length;
   const verifiedBusinesses = allProfiles.filter((p) => p.verified === true).length;
-  const totalSearches = history.length;
+  const totalSearches = cache.length;
 
   const emailsFound = allProfiles.filter(
     (p) => p.generalEmail || p.supportEmail || p.salesEmail
@@ -281,12 +253,10 @@ export default function HomePage() {
   const [results, setResults] = useState<ExtractResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loadingPhase, setLoadingPhase] = useState("");
 
   const refreshLocalData = useCallback(() => {
     setStats(computeStats());
-    setHistory(loadHistory());
   }, []);
 
   useEffect(() => {
@@ -326,7 +296,6 @@ export default function HomePage() {
           city: selectedCity,
           industry: selectedIndustry,
         });
-        addHistoryItem(selectedCity, selectedIndustry, "cached");
         refreshLocalData();
       } else {
         const res = await fetch("/api/search", {
@@ -342,7 +311,6 @@ export default function HomePage() {
         } else {
           setResults(data);
           setCachedProfiles(selectedCity, selectedIndustry, data.profiles);
-          addHistoryItem(selectedCity, selectedIndustry, "completed");
           refreshLocalData();
         }
       }
@@ -353,63 +321,6 @@ export default function HomePage() {
       setLoading(false);
       setLoadingPhase("");
     }
-  };
-
-  const handleHistoryClick = (city: string, industry: string) => {
-    setSelectedCity(city);
-    setSelectedIndustry(industry);
-
-    setLoading(true);
-    setError(null);
-    setResults(null);
-
-    const phases = [
-      "Searching for businesses...",
-      `Finding ${industry} in ${city}...`,
-      "Extracting contact information...",
-    ];
-    let phaseIndex = 0;
-    setLoadingPhase(phases[0]);
-    const interval = setInterval(() => {
-      phaseIndex++;
-      if (phaseIndex < phases.length) {
-        setLoadingPhase(phases[phaseIndex]);
-      }
-    }, 1500);
-
-    const cachedProfiles = getCachedProfiles(city, industry);
-    if (cachedProfiles) {
-      setResults({ profiles: cachedProfiles, cached: true, city, industry });
-      addHistoryItem(city, industry, "cached");
-      refreshLocalData();
-      clearInterval(interval);
-      setLoading(false);
-      setLoadingPhase("");
-      return;
-    }
-
-    fetch("/api/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ city, industry }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setResults(data);
-          setCachedProfiles(city, industry, data.profiles);
-          addHistoryItem(city, industry, "completed");
-          refreshLocalData();
-        }
-      })
-      .catch(() => setError("Network error."))
-      .finally(() => {
-        clearInterval(interval);
-        setLoading(false);
-        setLoadingPhase("");
-      });
   };
 
   const selectStyle: React.CSSProperties = {
@@ -707,82 +618,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {history.length > 0 && (
-        <div>
-          <h2
-            style={{
-              fontSize: "1.2rem",
-              fontWeight: 700,
-              fontFamily: "'Outfit', sans-serif",
-              marginBottom: 16,
-              color: "var(--text-secondary)",
-            }}
-          >
-            Recent Extractions
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {history.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => item.city && item.industry && handleHistoryClick(item.city, item.industry)}
-                className="glass-card"
-                style={{
-                  padding: "14px 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  cursor: "pointer",
-                  border: "1px solid var(--border)",
-                  background: "var(--bg-card)",
-                  width: "100%",
-                  textAlign: "left",
-                  fontSize: "0.9rem",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ color: "var(--text-muted)" }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                  </span>
-                  <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
-                    {item.industry} in {item.city}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span
-                    style={{
-                      padding: "2px 8px",
-                      borderRadius: 6,
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      background: item.status === "cached"
-                        ? "rgba(0, 230, 230, 0.1)"
-                        : "rgba(0, 230, 118, 0.1)",
-                      color: item.status === "cached"
-                        ? "var(--accent-cyan)"
-                        : "var(--accent-green)",
-                      border: `1px solid ${
-                        item.status === "cached"
-                          ? "rgba(0, 230, 230, 0.2)"
-                          : "rgba(0, 230, 118, 0.2)"
-                      }`,
-                    }}
-                  >
-                    {item.status === "cached" ? "Cached" : "Fresh"}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    {new Date(item.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       <footer className="footer">
         <p style={{ margin: 0 }}>
