@@ -75,6 +75,26 @@ const INDUSTRIES = [
   "Hotels & Hospitality",
 ];
 
+const CACHE_KEY = "bizintel_profiles";
+const HISTORY_KEY = "bizintel_history";
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+interface CachedEntry {
+  city: string;
+  industry: string;
+  profiles: Record<string, unknown>[];
+  timestamp: number;
+}
+
+interface HistoryItem {
+  id: string;
+  query: string;
+  city: string;
+  industry: string;
+  status: string;
+  createdAt: string;
+}
+
 interface Stats {
   totalBusinesses: number;
   verifiedBusinesses: number;
@@ -88,15 +108,6 @@ interface Stats {
   industryBreakdown: { industry: string; count: number }[];
 }
 
-interface SearchHistoryItem {
-  id: string;
-  createdAt: string;
-  query: string;
-  city: string | null;
-  industry: string | null;
-  status: string;
-}
-
 interface ExtractResponse {
   profiles: Record<string, unknown>[];
   cached: boolean;
@@ -106,7 +117,126 @@ interface ExtractResponse {
   error?: string;
 }
 
-// ── SVG Icons ────────────────────────────────────────────────────────────────
+function loadCache(): CachedEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveCache(entries: CachedEntry[]) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(entries));
+}
+
+function loadHistory(): HistoryItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(items: HistoryItem[]) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+}
+
+function getCachedProfiles(city: string, industry: string): Record<string, unknown>[] | null {
+  const cache = loadCache();
+  const entry = cache.find(
+    (e) => e.city === city && e.industry === industry && Date.now() - e.timestamp < CACHE_TTL
+  );
+  return entry ? entry.profiles : null;
+}
+
+function setCachedProfiles(city: string, industry: string, profiles: Record<string, unknown>[]) {
+  const cache = loadCache();
+  const existing = cache.findIndex((e) => e.city === city && e.industry === industry);
+  const entry: CachedEntry = { city, industry, profiles, timestamp: Date.now() };
+  if (existing >= 0) {
+    cache[existing] = entry;
+  } else {
+    cache.push(entry);
+  }
+  saveCache(cache);
+}
+
+function addHistoryItem(city: string, industry: string, status: string) {
+  const history = loadHistory();
+  history.unshift({
+    id: crypto.randomUUID(),
+    query: `${industry} in ${city}`,
+    city,
+    industry,
+    status,
+    createdAt: new Date().toISOString(),
+  });
+  saveHistory(history.slice(0, 50));
+}
+
+function computeStats(): Stats {
+  const cache = loadCache();
+  const allProfiles: Record<string, unknown>[] = [];
+  for (const entry of cache) {
+    allProfiles.push(...entry.profiles);
+  }
+  const history = loadHistory();
+
+  const totalBusinesses = allProfiles.length;
+  const verifiedBusinesses = allProfiles.filter((p) => p.verified === true).length;
+  const totalSearches = history.length;
+
+  const emailsFound = allProfiles.filter(
+    (p) => p.generalEmail || p.supportEmail || p.salesEmail
+  ).length;
+
+  const phonesFound = allProfiles.filter((p) => p.officePhone).length;
+  const websitesFound = allProfiles.filter((p) => p.officialWebsite).length;
+
+  const socialsFound = allProfiles.filter(
+    (p) => p.facebook || p.instagram || p.linkedin || p.twitter || p.youtube
+  ).length;
+
+  const scores = allProfiles
+    .map((p) => p.confidenceScore as number)
+    .filter((s) => typeof s === "number");
+  const averageConfidence = scores.length
+    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+    : 0;
+
+  const cityMap = new Map<string, number>();
+  const industryMap = new Map<string, number>();
+  for (const p of allProfiles) {
+    const c = p.city as string;
+    const ind = p.industry as string;
+    if (c) cityMap.set(c, (cityMap.get(c) || 0) + 1);
+    if (ind) industryMap.set(ind, (industryMap.get(ind) || 0) + 1);
+  }
+
+  const cityBreakdown = [...cityMap.entries()]
+    .map(([city, count]) => ({ city, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const industryBreakdown = [...industryMap.entries()]
+    .map(([industry, count]) => ({ industry, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    totalBusinesses,
+    verifiedBusinesses,
+    totalSearches,
+    emailsFound,
+    phonesFound,
+    websitesFound,
+    socialsFound,
+    averageConfidence,
+    cityBreakdown,
+    industryBreakdown,
+  };
+}
+
 const SearchIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8"/>
@@ -118,7 +248,6 @@ const LoaderIcon = () => (
   <div className="spinner" />
 );
 
-// ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
@@ -145,7 +274,6 @@ function StatCard({
   );
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
 export default function HomePage() {
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedIndustry, setSelectedIndustry] = useState("");
@@ -153,37 +281,17 @@ export default function HomePage() {
   const [results, setResults] = useState<ExtractResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loadingPhase, setLoadingPhase] = useState("");
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch("/api/stats");
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch {
-      // silent
-    }
-  }, []);
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const res = await fetch("/api/search");
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data.searches || []);
-      }
-    } catch {
-      // silent
-    }
+  const refreshLocalData = useCallback(() => {
+    setStats(computeStats());
+    setHistory(loadHistory());
   }, []);
 
   useEffect(() => {
-    fetchStats();
-    fetchHistory();
-  }, [fetchStats, fetchHistory]);
+    refreshLocalData();
+  }, [refreshLocalData]);
 
   const handleExtract = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,20 +318,33 @@ export default function HomePage() {
     }, 2500);
 
     try {
-      const res = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ city: selectedCity, industry: selectedIndustry }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Extraction failed");
+      const cachedProfiles = getCachedProfiles(selectedCity, selectedIndustry);
+      if (cachedProfiles) {
+        setResults({
+          profiles: cachedProfiles,
+          cached: true,
+          city: selectedCity,
+          industry: selectedIndustry,
+        });
+        addHistoryItem(selectedCity, selectedIndustry, "cached");
+        refreshLocalData();
       } else {
-        setResults(data);
-        fetchStats();
-        fetchHistory();
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ city: selectedCity, industry: selectedIndustry }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error || "Extraction failed");
+        } else {
+          setResults(data);
+          setCachedProfiles(selectedCity, selectedIndustry, data.profiles);
+          addHistoryItem(selectedCity, selectedIndustry, "completed");
+          refreshLocalData();
+        }
       }
     } catch {
       setError("Network error. Please try again.");
@@ -256,6 +377,17 @@ export default function HomePage() {
       }
     }, 1500);
 
+    const cachedProfiles = getCachedProfiles(city, industry);
+    if (cachedProfiles) {
+      setResults({ profiles: cachedProfiles, cached: true, city, industry });
+      addHistoryItem(city, industry, "cached");
+      refreshLocalData();
+      clearInterval(interval);
+      setLoading(false);
+      setLoadingPhase("");
+      return;
+    }
+
     fetch("/api/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -267,8 +399,9 @@ export default function HomePage() {
           setError(data.error);
         } else {
           setResults(data);
-          fetchStats();
-          fetchHistory();
+          setCachedProfiles(city, industry, data.profiles);
+          addHistoryItem(city, industry, "completed");
+          refreshLocalData();
         }
       })
       .catch(() => setError("Network error."))
@@ -299,7 +432,6 @@ export default function HomePage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", paddingTop: 48, paddingBottom: 80 }}>
-      {/* ── Hero ────────────────────────────────────────────────────── */}
       <div style={{ textAlign: "center", marginBottom: 48 }}>
         <h1
           style={{
@@ -324,7 +456,6 @@ export default function HomePage() {
           Extract verified business contacts across Pakistan. Select a city and industry to discover companies.
         </p>
 
-        {/* ── City + Industry Selectors ───────────────────────────── */}
         <form
           onSubmit={handleExtract}
           style={{
@@ -380,7 +511,6 @@ export default function HomePage() {
           </button>
         </form>
 
-        {/* Loading phase indicator */}
         {loading && loadingPhase && (
           <div
             className="fade-in-up"
@@ -396,7 +526,6 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* ── Error ───────────────────────────────────────────────────── */}
       {error && (
         <div
           className="glass-card fade-in-up"
@@ -412,7 +541,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── Results ────────────────────────────────────────────────── */}
       {results && results.profiles && results.profiles.length > 0 && (
         <div style={{ marginBottom: 48 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -472,7 +600,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── Stats Grid ──────────────────────────────────────────────── */}
       {stats && (
         <div style={{ marginBottom: 48 }}>
           <h2
@@ -528,7 +655,6 @@ export default function HomePage() {
             />
           </div>
 
-          {/* City & Industry Breakdowns */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {stats.cityBreakdown.length > 0 && (
               <div className="glass-card" style={{ padding: "20px 24px" }}>
@@ -581,7 +707,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── Search History ──────────────────────────────────────────── */}
       {history.length > 0 && (
         <div>
           <h2
@@ -659,7 +784,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── Footer ──────────────────────────────────────────────────── */}
       <footer className="footer">
         <p style={{ margin: 0 }}>
           Designed by{" "}
