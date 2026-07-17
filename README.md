@@ -2,9 +2,13 @@
 
 # Pakistan BizIntel
 
-**Pakistan Business Intelligence & Contact Extraction Platform**
+### Your Complete Business Directory for Pakistan
 
-Extract verified business contacts, social media profiles, and official online presence across Pakistan — organized by **city** and **industry**.
+**Find any business's email, phone number, website, and social media — by city and industry.**
+
+*No manual searching. No outdated directories. No wasted hours.*
+
+---
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev)
@@ -16,500 +20,347 @@ Extract verified business contacts, social media profiles, and official online p
 
 ---
 
-## Overview
+## What Is This?
 
-Pakistan BizIntel is a web scraping and business intelligence platform purpose-built for the **Pakistan market**. Instead of searching by company name or website, you simply select a **city** and an **industry** — and the platform automatically discovers, scrapes, and catalogs business profiles matching that combination.
+Pakistan BizIntel is a smart business research tool built specifically for the **Pakistan market**. It automatically finds and collects contact information for businesses across Pakistan — organized by **city** and **industry**.
 
-Every extracted profile includes emails, phone numbers, social media links, physical addresses, and a confidence score — all organized in a clean dashboard with city and industry breakdowns.
+Think of it as your own personal business directory assistant. Instead of spending hours Googling individual companies, you simply:
 
----
+1. **Pick a city** — like Karachi, Lahore, or Islamabad
+2. **Pick an industry** — like Security Barriers, Restaurants, or Construction
+3. **Click Extract** — and the tool does the rest
 
-## Features
-
-### Core Extraction
-- **City + Industry Selection** — Pick from 11 Pakistani cities and 13 industry categories; the platform handles the rest
-- **Multi-Query Search** — Runs 3 parallel DuckDuckGo searches per city+industry combo for maximum coverage (e.g. `"Security Barriers companies in Karachi Pakistan"`, `"Security Barriers suppliers Karachi Pakistan contact"`, `"Security Barriers businesses Karachi Pakistan"`)
-- **Multi-Business Extraction** — Discovers and scrapes up to 8 business websites per extraction run
-- **Deep Page Crawling** — Crawls each business's homepage, `/contact`, and `/about` pages using Cheerio HTML parsing
-- **Email Extraction** — Regex-based email discovery with filtering (excludes image extensions, example.com, sentry, webpack)
-- **Phone Number Extraction** — Pakistani and international phone number pattern matching (minimum 7 digits)
-- **Social Media Discovery** — Detects profiles across 10 platforms via URL pattern matching in HTML source
-- **Confidence Scoring** — 0-100 score calculated from data completeness: website found (+20), contact page (+10), about page (+5), homepage crawled (+15), emails found (+15), phones found (+10), social media presence (up to +25)
-
-### Dashboard & Analytics
-- **Real-Time Stats** — Total businesses, emails found, phones found, social accounts, verified count
-- **City Breakdown** — Number of extracted businesses per city, sorted by count
-- **Industry Breakdown** — Number of extracted businesses per industry, sorted by count
-- **Search History** — Click any previous extraction to re-run it instantly
-- **Cache Indicator** — Shows whether results are fresh or loaded from the 24-hour cache
-
-### UI/UX
-- **Glassmorphism Design** — Modern glass-card UI with frosted backgrounds and gradient accents
-- **Animated Loading Phases** — Progress indicator showing: searching → finding → extracting → discovering → verifying
-- **Confidence Ring** — Circular visual indicator with color-coded reliability labels (Verified/Reliable/Possible/Low)
-- **Copy-to-Clipboard** — One-click copy for emails, phones, addresses, and website URLs
-- **Responsive Layout** — Works on desktop and mobile with auto-fitting CSS grids
+Within moments, you get a clean list of businesses with their emails, phone numbers, websites, social media profiles, and physical addresses — all verified and scored for reliability.
 
 ---
 
-## Supported Locations
+## Why Do You Need This?
 
-### Cities (11)
-
-| City | Province | Notes |
-|------|----------|-------|
-| Karachi | Sindh | Largest city, commercial capital |
-| Lahore | Punjab | Cultural capital, tech hub |
-| Islamabad | ICT | Federal capital |
-| Rawalpindi | Punjab | Twin city of Islamabad |
-| Faisalabad | Punjab | Textile & industrial hub |
-| Multan | Punjab | Agricultural & industrial center |
-| Peshawar | KPK | Northwest hub |
-| Quetta | Balochistan | Provincial capital |
-| Sialkot | Punjab | Sports goods & surgical instruments |
-| Hyderabad | Sindh | Industrial center |
-| Abbottabad | KPK | Education & tourism |
-
-### Industries (13)
-
-| Industry | Description |
-|----------|-------------|
-| Security Barriers & Bollards | Road barriers, bollards, perimeter security, access control equipment |
-| Food Venues & Restaurants | Restaurants, cafes, catering, food chains, bakeries |
-| Construction | Contractors, builders, architecture, materials supply |
-| Textiles | Garment manufacturers, fabric suppliers, fashion houses |
-| IT & Software | Software houses, IT services, web development, digital agencies |
-| Real Estate | Property developers, agents, housing societies |
-| Healthcare & Hospitals | Hospitals, clinics, pharmaceutical companies, medical equipment |
-| Education | Schools, colleges, universities, coaching centers |
-| Automotive | Car dealers, spare parts, workshops, transport companies |
-| Retail & Shopping | Malls, wholesale markets, retail chains, e-commerce |
-| Manufacturing | Factories, industrial production, FMCG |
-| Legal & Law Firms | Lawyers, legal services, corporate law, chambers |
-| Hotels & Hospitality | Hotels, motels, guest houses, event venues |
+| Without BizIntel | With BizIntel |
+|------------------|---------------|
+| Manually Google each business one by one | Find dozens of businesses in one click |
+| Copy-paste contact info from random websites | Get organized, structured contact data |
+| No idea if the info is current or accurate | Every result is scored for reliability |
+| Scattered notes across spreadsheets | Everything saved in one place |
+| Hours wasted on dead phone numbers & bounced emails | Only verified, working contacts |
+| No way to track what you've already searched | Full history of every extraction |
 
 ---
 
-## Architecture
+## Who Is This For?
 
-```mermaid
-flowchart TD
-    subgraph Frontend ["Frontend (Next.js Client)"]
-        A["City Dropdown + Industry Dropdown"] -->|POST /api/search {city, industry}| B[API Route]
-        A2[Dashboard Stats] -->|GET /api/stats| B2[Stats API Route]
-        A3[Extraction History] -->|GET /api/search| B3[History API Route]
-    end
-
-    subgraph API ["API Layer (Next.js Route Handlers)"]
-        B --> C{Cache Hit?}
-        C -->|Yes| D[Return Cached Profiles]
-        C -->|No| E[Scraper Engine]
-        E --> F["Persist to Database (multiple profiles)"]
-        D --> G[Return Response to Client]
-        F --> G
-    end
-
-    subgraph Scraper ["Scraper Engine (src/lib/scraper.ts)"]
-        E --> Q1["Query 1: {industry} companies in {city} Pakistan"]
-        E --> Q2["Query 2: {industry} suppliers {city} Pakistan contact"]
-        E --> Q3["Query 3: {industry} businesses {city} Pakistan"]
-        Q1 --> S[DuckDuckGo Search]
-        Q2 --> S
-        Q3 --> S
-        S --> D1[Deduplicate URLs]
-        D1 --> D2["Filter out social media / directories"]
-        D2 --> SC["Scrape each business (up to 8)"]
-        SC --> F1[Fetch Homepage]
-        SC --> F2[Fetch /contact]
-        SC --> F3[Fetch /about]
-        F1 --> EX[Extract Emails, Phones, Socials]
-        F2 --> EX
-        F3 --> EX
-        EX --> CS[Calculate Confidence Score]
-        CS --> F
-    end
-
-    subgraph DB ["Database (SQLite + Prisma)"]
-        F --> I[(BusinessProfile)]
-        B3 --> I2[(SearchHistory)]
-        B2 --> I
-        I -.->|1:N| I2
-    end
-
-    style Frontend fill:#1a1a2e,stroke:#6c5ce7,color:#f0f0f5
-    style API fill:#16213e,stroke:#4fc3f7,color:#f0f0f5
-    style Scraper fill:#0f3460,stroke:#00e5ff,color:#f0f0f5
-    style DB fill:#1a1a2e,stroke:#00e676,color:#f0f0f5
-```
+- **Sales Teams** — Build lead lists for cold calling, email campaigns, and outreach
+- **Marketing Agencies** — Find potential clients by city and industry for targeted campaigns
+- **Business Development** — Identify partners, suppliers, and distributors across Pakistan
+- **Market Researchers** — Map out industry landscapes in specific cities
+- **Entrepreneurs** — Discover competitors and potential collaborators
+- **Recruiters** — Find companies hiring in specific sectors and locations
+- **Exporters/Importers** — Locate potential buyers or suppliers in Pakistani cities
+- **Event Organizers** — Find businesses for sponsorships, partnerships, or vendor lists
 
 ---
 
-## Tech Stack
+## What You'll Get for Each Business
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Framework | Next.js 16 (App Router, Turbopack) | Server-side rendering, API routes, hot reload |
-| UI | React 19, Tailwind CSS 4 | Component rendering, utility-first styling |
-| Language | TypeScript 5 | Type safety, IntelliSense, compile-time checks |
-| Database | SQLite via Prisma ORM 6 | Local persistence, migrations, type-safe queries |
-| Scraping | Cheerio 1.2 | jQuery-like HTML parsing on the server |
-| Search | DuckDuckGo HTML | Free search engine (no API key required) |
-| Fonts | Inter + Outfit (Google Fonts) | Clean UI typography |
+Every business profile includes up to **30+ data points**:
 
----
-
-## Project Structure
-
-```
-extracter/
-├── prisma/
-│   ├── schema.prisma              # Database schema (BusinessProfile, SearchHistory)
-│   └── dev.db                     # SQLite database file
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── search/
-│   │   │   │   └── route.ts       # POST: extract by city+industry, GET: browse/history
-│   │   │   └── stats/
-│   │   │       └── route.ts       # GET: dashboard statistics with city/industry breakdown
-│   │   ├── globals.css            # Global styles, glassmorphism theme, animations
-│   │   ├── layout.tsx             # Root layout with floating orbs background
-│   │   └── page.tsx               # Main page: city/industry selectors, results, dashboard
-│   ├── components/
-│   │   └── SearchResult.tsx       # Business profile card with contacts, socials, confidence ring
-│   └── lib/
-│       ├── prisma.ts              # Prisma client singleton
-│       └── scraper.ts             # Core extraction engine (DuckDuckGo + Cheerio)
-├── package.json
-├── tsconfig.json
-├── next.config.ts
-├── postcss.config.mjs
-├── eslint.config.mjs
-└── README.md
-```
+| Data Type | What's Extracted | Example |
+|-----------|------------------|---------|
+| **Company Name** | Full business name | "Atlas Security Solutions (Pvt) Ltd" |
+| **Website** | Official website URL | `https://atlassecurity.pk` |
+| **Description** | What the company does | "Leading manufacturer of road barriers and bollards since 2005..." |
+| **Logo** | Company logo image | Extracted from their website |
+| **General Email** | Main contact email | `info@atlassecurity.pk` |
+| **Support Email** | Help/support email | `support@atlassecurity.pk` |
+| **Sales Email** | Business/sales email | `sales@atlassecurity.pk` |
+| **Phone Number** | Office phone | `+92 21 3456 7890` |
+| **Full Address** | Physical location | "SITE Area, Karachi, Sindh" |
+| **Facebook** | Facebook page | `facebook.com/atlassecurity` |
+| **Instagram** | Instagram profile | `instagram.com/atlassecurity` |
+| **LinkedIn** | LinkedIn company page | `linkedin.com/company/atlas-security` |
+| **Twitter/X** | Twitter profile | `twitter.com/atlassecurity` |
+| **YouTube** | YouTube channel | `youtube.com/@atlassecurity` |
+| **TikTok** | TikTok profile | `tiktok.com/@atlassecurity` |
+| **Confidence Score** | Reliability rating (0-100) | 85 out of 100 |
+| **Verified Status** | Auto-verified if score >= 75 | Verified |
 
 ---
 
-## Database Schema
+## Reliability Score — How Trustworthy Is Each Result?
 
-### BusinessProfile
+Every business gets a **Confidence Score** from 0 to 100. This tells you how reliable the extracted data is.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | String (cuid) | Unique identifier |
-| `createdAt` | DateTime | Record creation timestamp |
-| `updatedAt` | DateTime | Last update timestamp (used for cache TTL) |
-| `companyName` | String | Extracted business name |
-| `legalName` | String? | Legal/registered name |
-| `brandName` | String? | Brand/trade name |
-| `logoUrl` | String? | Logo URL from og:image or favicon |
-| `description` | String? | Meta description from the website |
-| `industry` | String? | Industry category (e.g. "Security Barriers & Bollards") |
-| `category` | String? | Sub-category |
-| `foundedYear` | String? | Year founded |
-| `employeeCount` | String? | Employee count range |
-| `headquarters` | String? | HQ location |
-| `companyType` | String? | Company type (Pvt Ltd, etc.) |
-| `officialWebsite` | String? | Primary website URL |
-| `contactPage` | String? | Contact page URL |
-| `aboutPage` | String? | About page URL |
-| `generalEmail` | String? | info@, contact@, hello@ email |
-| `supportEmail` | String? | support@, help@ email |
-| `salesEmail` | String? | sales@, business@ email |
-| `officePhone` | String? | Primary phone number |
-| `country` | String? | Always "Pakistan" |
-| `state` | String? | Province |
-| `city` | String? | City name (e.g. "Karachi") |
-| `street` | String? | Street address |
-| `fullAddress` | String? | Complete address string |
-| `facebook` | String? | Facebook page URL |
-| `instagram` | String? | Instagram profile URL |
-| `linkedin` | String? | LinkedIn company page URL |
-| `twitter` | String? | X/Twitter profile URL |
-| `tiktok` | String? | TikTok profile URL |
-| `youtube` | String? | YouTube channel URL |
-| `threads` | String? | Threads profile URL |
-| `pinterest` | String? | Pinterest profile URL |
-| `github` | String? | GitHub profile URL |
-| `medium` | String? | Medium profile URL |
-| `confidenceScore` | Int | 0-100 score based on data completeness |
-| `verified` | Boolean | True if confidenceScore >= 75 |
+| Score | Rating | What It Means |
+|-------|--------|---------------|
+| 90 - 100 | **Verified** | Excellent data. Multiple contact points confirmed. You can trust this. |
+| 75 - 89 | **Reliable** | Good data. Website, email, and phone all found. Safe to use. |
+| 50 - 74 | **Possible** | Some data found, but incomplete. Verify before using for outreach. |
+| 0 - 49 | **Low** | Limited data. May be outdated or incomplete. Use with caution. |
 
-**Indexes:** `city`, `industry`, `(city, industry)` composite, `country`
+**How the score is calculated:**
 
-### SearchHistory
+| What We Check | Points |
+|---------------|--------|
+| Found their official website | +20 |
+| Read their homepage successfully | +15 |
+| Found their contact page | +10 |
+| Found their about page | +5 |
+| Extracted email addresses | +15 |
+| Extracted phone numbers | +10 |
+| Found social media profiles (each) | +5 (up to 25) |
+| **Maximum possible** | **100** |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | String (cuid) | Unique identifier |
-| `createdAt` | DateTime | Search timestamp |
-| `query` | String | Search query string (e.g. "Security Barriers & Bollards in Karachi") |
-| `city` | String? | City searched |
-| `industry` | String? | Industry searched |
-| `status` | String | "completed" or "cached" |
-| `profileId` | String? | Linked BusinessProfile ID |
+Businesses scoring 75 or above are automatically marked as **Verified**.
 
 ---
 
-## API Reference
+## Cities Covered
 
-### `POST /api/search` — Extract Businesses
+We cover all major business centers across Pakistan:
 
-Triggers a full extraction run for a city + industry combination. Scrapes DuckDuckGo, crawls business websites, and saves results to the database.
-
-**Request Body:**
-```json
-{
-  "city": "Karachi",
-  "industry": "Security Barriers & Bollards"
-}
-```
-
-**Valid Cities:**
-`Karachi`, `Lahore`, `Islamabad`, `Rawalpindi`, `Faisalabad`, `Multan`, `Peshawar`, `Quetta`, `Sialkot`, `Hyderabad`, `Abbottabad`
-
-**Valid Industries:**
-`Security Barriers & Bollards`, `Food Venues & Restaurants`, `Construction`, `Textiles`, `IT & Software`, `Real Estate`, `Healthcare & Hospitals`, `Education`, `Automotive`, `Retail & Shopping`, `Manufacturing`, `Legal & Law Firms`, `Hotels & Hospitality`
-
-**Response (Fresh):**
-```json
-{
-  "profiles": [
-    {
-      "id": "clx1234...",
-      "companyName": "ABC Security Solutions",
-      "officialWebsite": "https://abcsecurity.pk",
-      "description": "Leading security barrier manufacturer in Pakistan...",
-      "industry": "Security Barriers & Bollards",
-      "city": "Karachi",
-      "country": "Pakistan",
-      "generalEmail": "info@abcsecurity.pk",
-      "supportEmail": "support@abcsecurity.pk",
-      "salesEmail": null,
-      "officePhone": "+92 21 1234 5678",
-      "facebook": "https://facebook.com/abcsecurity",
-      "instagram": null,
-      "linkedin": "https://linkedin.com/company/abcsecurity",
-      "twitter": null,
-      "tiktok": null,
-      "youtube": null,
-      "fullAddress": "Industrial Area, SITE, Karachi",
-      "confidenceScore": 80,
-      "verified": true,
-      ...
-    },
-    ...
-  ],
-  "cached": false,
-  "city": "Karachi",
-  "industry": "Security Barriers & Bollards",
-  "totalFound": 5
-}
-```
-
-**Response (Cached — within 24 hours):**
-```json
-{
-  "profiles": [...],
-  "cached": true,
-  "city": "Karachi",
-  "industry": "Security Barriers & Bollards"
-}
-```
-
-**Error Response:**
-```json
-{
-  "error": "Invalid city. Must be one of: Karachi, Lahore, Islamabad, ..."
-}
-```
+| City | Province | Why It Matters |
+|------|----------|----------------|
+| **Karachi** | Sindh | Pakistan's largest city and commercial capital |
+| **Lahore** | Punjab | Cultural capital and growing tech hub |
+| **Islamabad** | ICT | Federal capital, government & corporate center |
+| **Rawalpindi** | Punjab | Twin city of Islamabad, military & industrial |
+| **Faisalabad** | Punjab | Pakistan's textile and industrial powerhouse |
+| **Multan** | Punjab | Agricultural and industrial center of South Punjab |
+| **Peshawar** | KPK | Gateway to the northwest, trade & commerce |
+| **Quetta** | Balochistan | Provincial capital, mining & agriculture |
+| **Sialkot** | Punjab | World-famous for sports goods and surgical instruments |
+| **Hyderabad** | Sindh | Industrial center between Karachi and interior Sindh |
+| **Abbottabad** | KPK | Education hub and tourism center |
 
 ---
 
-### `GET /api/search` — Browse / History
+## Industries Covered
 
-Without parameters, returns the 20 most recent extraction history entries.
+We currently support **13 industry categories** — the most in-demand sectors for Pakistani businesses:
 
-With query parameters, filters stored business profiles:
-
-```
-GET /api/search?city=Karachi
-GET /api/search?industry=Construction
-GET /api/search?city=Lahore&industry=IT & Software
-```
-
-**Response:**
-```json
-{
-  "profiles": [...],
-  "city": "Karachi",
-  "industry": null
-}
-```
-
-or for history:
-
-```json
-{
-  "searches": [
-    {
-      "id": "...",
-      "query": "Security Barriers & Bollards in Karachi",
-      "city": "Karachi",
-      "industry": "Security Barriers & Bollards",
-      "status": "completed",
-      "createdAt": "2026-07-17T10:30:00.000Z"
-    }
-  ]
-}
-```
+| Industry | Includes Businesses Like... |
+|----------|---------------------------|
+| **Security Barriers & Bollards** | Road barrier manufacturers, bollard suppliers, perimeter security companies, access control equipment dealers |
+| **Food Venues & Restaurants** | Restaurants, cafes, bakeries, catering companies, food chains, cloud kitchens |
+| **Construction** | Building contractors, architects, construction material suppliers, real estate developers |
+| **Textiles** | Garment manufacturers, fabric suppliers, yarn traders, fashion houses, home textile producers |
+| **IT & Software** | Software houses, web development agencies, IT consultants, digital marketing firms, app developers |
+| **Real Estate** | Property developers, real estate agents, housing societies, property portals |
+| **Healthcare & Hospitals** | Hospitals, clinics, pharmaceutical companies, medical equipment suppliers, diagnostic labs |
+| **Education** | Schools, colleges, universities, training institutes, coaching centers, EdTech companies |
+| **Automotive** | Car dealers, spare parts shops, workshops, transport companies, tire shops |
+| **Retail & Shopping** | Wholesale markets, retail chains, shopping malls, e-commerce businesses |
+| **Manufacturing** | Factories, industrial production units, FMCG companies, packaging firms |
+| **Legal & Law Firms** | Law firms, corporate lawyers, legal consultants, notary services |
+| **Hotels & Hospitality** | Hotels, motels, guest houses, event venues, travel agencies |
 
 ---
 
-### `GET /api/stats` — Dashboard Statistics
+## How It Works — A Simple Walkthrough
 
-Returns aggregate statistics for the Pakistan database with city and industry breakdowns.
+Here's exactly what happens when you use BizIntel:
 
-**Response:**
-```json
-{
-  "totalBusinesses": 45,
-  "verifiedBusinesses": 30,
-  "totalSearches": 12,
-  "emailsFound": 38,
-  "phonesFound": 42,
-  "websitesFound": 45,
-  "socialsFound": 28,
-  "averageConfidence": 72,
-  "cityBreakdown": [
-    { "city": "Karachi", "count": 15 },
-    { "city": "Lahore", "count": 12 },
-    { "city": "Islamabad", "count": 8 }
-  ],
-  "industryBreakdown": [
-    { "industry": "Security Barriers & Bollards", "count": 10 },
-    { "industry": "Food Venues & Restaurants", "count": 8 },
-    { "industry": "Construction", "count": 7 }
-  ]
-}
-```
+### Step 1: You Make Your Selection
+
+You open the app and see two simple dropdown menus:
+- **Left dropdown** — Pick a city (e.g., "Karachi")
+- **Right dropdown** — Pick an industry (e.g., "Security Barriers & Bollards")
+- Click the **Extract** button
+
+### Step 2: The System Searches the Internet
+
+Behind the scenes, BizIntel sends **three different search queries** to find relevant businesses. For example:
+- "Security Barriers companies in Karachi Pakistan"
+- "Security Barriers suppliers Karachi Pakistan contact"
+- "Security Barriers businesses Karachi Pakistan"
+
+Using three different searches means we find more businesses than a single search would.
+
+### Step 3: Results Are Filtered
+
+Not every search result is a real business. BizIntel automatically:
+- **Removes** social media links (Facebook pages, Instagram profiles)
+- **Removes** directory listings (Yellow Pages, Yelp, Google Maps)
+- **Removes** Wikipedia and encyclopedia entries
+- **Keeps** only actual business websites
+
+### Step 4: Each Business Is Deep-Scanned
+
+For every business website found (up to 8 per search), BizIntel:
+1. **Reads the homepage** — Finds description, logo, emails, phone numbers, social media links
+2. **Checks the contact page** — Often has additional phone numbers and emails
+3. **Checks the about page** — May have more contact details and company info
+
+### Step 5: Data Is Organized and Scored
+
+All the information is:
+- **Cleaned up** — Duplicate emails and phone numbers are removed
+- **Categorized** — Emails sorted into General, Support, and Sales
+- **Scored** — A confidence score (0-100) is calculated based on how much data was found
+- **Verified** — Businesses scoring 75+ are marked as "Verified"
+
+### Step 6: Results Are Saved and Displayed
+
+Everything is saved to the database. You see a clean card for each business showing:
+- Company name and description
+- All emails, phone numbers, and addresses
+- Social media links with colored badges
+- A circular confidence score indicator
+- A "Verified" badge if applicable
+
+### Step 7: Smart Caching Saves Time
+
+If you search the same city + industry again within 24 hours, BizIntel instantly shows the saved results instead of re-scraping the internet. This means:
+- Faster results on repeat searches
+- No wasted effort
+- The data stays fresh (auto-refreshes after 24 hours)
 
 ---
 
-## How It Works — Step by Step
+## The Dashboard
 
-### 1. User Selects City + Industry
+The dashboard gives you a bird's-eye view of everything you've collected:
 
-The user picks a city (e.g. "Karachi") and an industry (e.g. "Security Barriers & Bollards") from two dropdown menus, then clicks **Extract**.
+### Key Stats at a Glance
+- **Total Businesses** — How many businesses you've extracted across all searches
+- **Emails Found** — Total email addresses collected
+- **Phones Found** — Total phone numbers collected
+- **Social Accounts** — Total social media profiles discovered
+- **Verified** — How many businesses passed the reliability threshold
 
-### 2. Parallel DuckDuckGo Searches
+### City Breakdown
+See which cities have the most businesses in your database. Helps you identify where your data coverage is strongest.
 
-The scraper constructs 3 search queries and runs them in parallel:
-- `"Security Barriers & Bollards companies in Karachi Pakistan"`
-- `"Security Barriers & Bollards suppliers Karachi Pakistan contact"`
-- `"Security Barriers & Bollards businesses Karachi Pakistan"`
+### Industry Breakdown
+See which industries have the most profiles. Useful for understanding where your lead generation efforts are paying off.
 
-This maximizes the chance of finding relevant businesses.
+### Extraction History
+Every search you've ever run is listed here. Click any previous search to instantly re-run it — no need to re-select the city and industry.
 
-### 3. Result Filtering & Deduplication
+---
 
-Results are deduplicated by hostname. Social media sites (Facebook, Instagram, LinkedIn, Twitter, YouTube, TikTok), directories (Yelp, YellowPages, Google Maps), and encyclopedias (Wikipedia) are automatically filtered out — only real business websites proceed.
+## Frequently Asked Questions
 
-### 4. Business Name Extraction
+### Is this legal?
+BizIntel only extracts **publicly available information** that businesses have published on their own websites. It does not hack, bypass security, or access private data. It's the same as visiting a website and writing down their contact information — just done automatically and at scale.
 
-Each business name is extracted from the search result title by stripping common suffixes like "— Home", "| Official Website", etc.
+### How accurate is the data?
+Every business gets a **Confidence Score** (0-100) so you know exactly how reliable the information is. Businesses scoring 75+ are marked as "Verified." We recommend always doing a quick verification before important outreach.
 
-### 5. Website Crawling (Per Business)
+### How many businesses can I find per search?
+Each extraction finds up to **8 businesses** for a given city + industry combination. For industries with many businesses in a major city, you may want to run multiple extractions over time.
 
-For each of the up to 8 businesses found, the scraper fetches:
-1. **Homepage** — Extracts meta description, logo, emails, phones, social links
-2. **/contact page** — Additional emails, phones, and social links
-3. **/about page** — Additional emails and social links
+### Does it work for Urdu-only businesses?
+The search queries are in English, so businesses with English websites are found most easily. Businesses with only Urdu content may be underrepresented. We're working on adding Urdu search support in future versions.
 
-All fetches have a 10-second timeout with abort controller.
+### Can I add more cities or industries?
+Yes! The system is designed to be easily expanded. A developer can add new cities or industries by updating the configuration in the code. See the Technical Documentation section below.
 
-### 6. Data Extraction
+### How often should I re-extract?
+Results are cached for **24 hours**. After that, the system will automatically fetch fresh data the next time you search the same combination. You can also force a fresh extraction by waiting 24 hours or searching a slightly different combination.
 
-- **Emails**: Regex `[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}` with noise filtering
-- **Phones**: Regex matching international formats, minimum 7 digits
-- **Socials**: URL pattern matching for 10 platforms (Facebook, Instagram, LinkedIn, X, TikTok, YouTube, Threads, Pinterest, GitHub, Medium)
-- **Meta**: `og:description`, `meta[name="description"]`, `og:image`, `link[rel="icon"]`
+### What if no results are found?
+This can happen if:
+- The industry doesn't have many businesses with websites in that specific city
+- The businesses in that area primarily use Urdu-only websites
+- The search terms need to be broader
 
-### 7. Email Categorization
+Try a neighboring city or a related industry category.
 
-Emails are automatically sorted:
-- **General**: `info@`, `contact@`, `hello@`
-- **Support**: `support@`, `help@`
-- **Sales**: `sales@`, `business@`
+### Can I export the data?
+The data is stored in a standard SQLite database file (`prisma/dev.db`). A developer can easily export it to CSV, Excel, or any other format. Direct export features are planned for future versions.
 
-### 8. Confidence Scoring
+---
 
-| Signal | Points |
-|--------|--------|
-| Official website found | +20 |
-| Homepage crawled successfully | +15 |
-| Contact page found | +10 |
-| About page found | +5 |
-| Emails found | +15 |
-| Phone numbers found | +10 |
-| Social media profiles (each) | +5 (max 25) |
+## Use Cases — Real Examples
 
-**Total: max 100**
+### Use Case 1: Sales Lead Generation
+**Scenario:** You sell security equipment and want to find construction companies in Lahore that might need road barriers.
 
-| Score Range | Label | Color |
-|-------------|-------|-------|
-| 90-100 | Verified | Green |
-| 75-89 | Reliable | Blue |
-| 50-74 | Possible | Orange |
-| 0-49 | Low | Pink |
+**How to use BizIntel:**
+1. Select **Lahore** as the city
+2. Select **Construction** as the industry
+3. Click **Extract**
+4. Review the list of construction companies
+5. Use their emails and phone numbers for outreach
 
-Businesses with score >= 75 are automatically marked as `verified: true`.
+### Use Case 2: Competitive Analysis
+**Scenario:** You run a restaurant in Karachi and want to see who your competitors are and how they present themselves online.
 
-### 9. Database Storage
+**How to use BizIntel:**
+1. Select **Karachi** as the city
+2. Select **Food Venues & Restaurants** as the industry
+3. Click **Extract**
+4. Review each competitor's website, social media presence, and contact info
 
-All profiles are saved to SQLite via Prisma with `city`, `industry`, and `country: "Pakistan"` fields. Indexed on `(city, industry)` for fast lookups.
+### Use Case 3: Market Research
+**Scenario:** You're a textile exporter wanting to understand the IT landscape in Faisalabad to find potential tech partners.
 
-### 10. Caching
+**How to use BizIntel:**
+1. Select **Faisalabad** as the city
+2. Select **IT & Software** as the industry
+3. Click **Extract**
+4. Review the software companies, their websites, and reach out
 
-If the same city+industry combination was extracted within the last 24 hours, cached results are returned immediately without re-scraping.
+### Use Case 4: Event Sponsorship
+**Scenario:** You're organizing a business conference in Islamabad and need sponsors from the hotel industry.
+
+**How to use BizIntel:**
+1. Select **Islamabad** as the city
+2. Select **Hotels & Hospitality** as the industry
+3. Click **Extract**
+4. Get a list of hotels with emails for sponsorship outreach
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+### What You'll Need
+- A computer with **Node.js 18 or newer** installed (Node.js 22 is recommended)
+- **npm** (comes with Node.js)
+- **Git** (to download the project)
 
-- **Node.js 18+** (recommended: 22 LTS)
-- **npm** (or yarn/pnpm)
+### Step 1: Download the Project
 
-### Installation
+Open a terminal (Command Prompt or PowerShell on Windows, Terminal on Mac) and run:
 
-```bash
+```
 git clone https://github.com/arqam66/extracter.git
 cd extracter
+```
+
+### Step 2: Install Dependencies
+
+```
 npm install
 ```
 
-### Database Setup
+This downloads all the required software packages. It may take a few minutes.
 
-```bash
+### Step 3: Set Up the Database
+
+```
 npx prisma generate
 npx prisma db push
 ```
 
-This creates the SQLite database at `prisma/dev.db` with the correct schema and indexes.
+This creates the local database where all extracted business data will be stored.
 
-### Development
+### Step 4: Start the Application
 
-```bash
+```
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+### Step 5: Open in Your Browser
 
-### Production Build
+Go to **http://localhost:3000** in your web browser. You'll see the Pakistan BizIntel interface with the city and industry dropdowns ready to use.
 
-```bash
+### For Production (Live Deployment)
+
+When you're ready to deploy for real use:
+
+```
 npm run build
 npm start
 ```
@@ -518,51 +369,102 @@ npm start
 
 ## Environment Variables
 
-**None required.** The application works out of the box:
-- SQLite database is created automatically at `prisma/dev.db`
-- DuckDuckGo HTML search requires no API key
-- All HTTP requests use a standard Chrome User-Agent string
+**None needed.** The application works right out of the box:
+- The database is created automatically when you run the setup commands
+- No API keys or accounts are required
+- Search functionality works immediately
 
 ---
 
-## Configuration
+## Frequently Asked Questions — Technical
 
-### Scraper Tuning (src/lib/scraper.ts)
+### Can I customize which cities or industries are available?
+Yes. A developer can edit the city and industry lists in `src/lib/scraper.ts` and `src/app/page.tsx`. New cities and industries can be added in minutes.
 
-| Constant | Default | Description |
-|----------|---------|-------------|
-| Search result limit | 10 per query | Max results from each DuckDuckGo query |
-| Business scrape limit | 8 per extraction | Max websites crawled per city+industry run |
-| Fetch timeout | 10 seconds | Per-page abort timeout |
-| Cache TTL | 24 hours | How long before re-extraction is triggered |
+### How do I add a new industry?
+1. Open `src/lib/scraper.ts`
+2. Add the new industry name to the `INDUSTRIES` array
+3. Open `src/app/page.tsx`
+4. Add the same name to the `INDUSTRIES` array there
+5. The new industry will immediately appear in the dropdown
 
-### Database Cache Check
+### How do I add a new city?
+Same process as above — edit the `PAKISTAN_CITIES` array in both files.
 
-The API checks for existing profiles matching the exact `city` + `industry` + `country: "Pakistan"` combination with `updatedAt` within the last 24 hours. If found, cached profiles are returned.
+### Can I change how many businesses are found per search?
+Yes. In `src/lib/scraper.ts`, find the line that says `allResults.slice(0, 8)` and change `8` to your preferred number. Higher numbers may slow down extraction.
+
+### Can I change the cache duration?
+In `src/app/api/search/route.ts`, find the cache check that uses `24 * 60 * 60 * 1000` (24 hours in milliseconds) and change it to your preferred duration.
+
+### What database does this use?
+**SQLite** — a lightweight, file-based database. The database file is stored at `prisma/dev.db`. No server setup required.
+
+### Can I switch to a different database?
+Yes. Prisma supports PostgreSQL, MySQL, and others. Change the `provider` in `prisma/schema.prisma` and update the connection URL. You may need to install the corresponding database driver.
 
 ---
 
-## Limitations
+## Project File Overview
 
-- **DuckDuckGo Rate Limiting**: Heavy usage may trigger rate limits from DuckDuckGo's HTML search
-- **Website Availability**: Some Pakistani business websites may be slow, down, or block crawlers
-- **Phone Number Patterns**: Pakistani numbers (+92 format) are well-supported, but some local-only formats may be missed
-- **Email Discovery**: Only finds emails present in HTML source; emails behind contact forms or JavaScript are not captured
-- **Language**: Search queries are in English; Urdu-only businesses may be underrepresented
-- **Extraction Limit**: Max 8 businesses per run to prevent timeouts; larger industries in major cities may require multiple runs
+For developers who want to understand the codebase:
+
+| File | What It Does |
+|------|-------------|
+| `prisma/schema.prisma` | Defines the database structure (what data fields are stored) |
+| `src/lib/scraper.ts` | The core engine — searches the internet, reads websites, extracts contact info |
+| `src/app/page.tsx` | The main user interface — dropdowns, buttons, results display, dashboard |
+| `src/components/SearchResult.tsx` | The business profile card — shows emails, phones, socials, confidence score |
+| `src/app/api/search/route.ts` | Handles search requests — checks cache, triggers extraction, saves results |
+| `src/app/api/stats/route.ts` | Calculates dashboard statistics — totals, breakdowns, averages |
+| `src/lib/prisma.ts` | Database connection helper |
+| `src/app/globals.css` | Visual styling — colors, glass effects, animations |
+| `src/app/layout.tsx` | Page layout — fonts, background effects |
+
+---
+
+## Limitations to Be Aware Of
+
+| Limitation | Explanation |
+|------------|-------------|
+| **English-first search** | Search queries are in English. Businesses with only Urdu websites may not appear. |
+| **Max 8 businesses per run** | Each extraction finds up to 8 businesses. For large industries, run multiple extractions. |
+| **Website must be public** | If a business doesn't have a public website, it won't be found. |
+| **Contact forms not scraped** | If a business only has a "Contact Us" form (no visible email/phone), we can't extract it. |
+| **Rate limits possible** | Very heavy usage may temporarily slow down searches. Take breaks between large extractions. |
+| **24-hour cache** | Same city+industry results are cached for 24 hours. This is by design to avoid overloading search engines. |
 
 ---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit changes (`git commit -m "Add my feature"`)
-4. Push to branch (`git push origin feature/my-feature`)
-5. Open a Pull Request
+We welcome contributions! If you're a developer and want to help improve BizIntel:
+
+1. **Fork** the repository on GitHub
+2. **Create a branch** for your feature
+3. **Make your changes**
+4. **Test** that everything works
+5. **Submit a Pull Request** with a clear description of what you changed
 
 ---
 
 ## License
 
-MIT
+This project is open source under the **MIT License**. You're free to use, modify, and distribute it.
+
+---
+
+## Support
+
+- **Issues & Bug Reports:** [GitHub Issues](https://github.com/arqam66/extracter/issues)
+- **Source Code:** [GitHub Repository](https://github.com/arqam66/extracter)
+
+---
+
+<div align="center">
+
+**Built for Pakistan's business community**
+
+*Pakistan BizIntel — Find. Connect. Grow.*
+
+</div>
