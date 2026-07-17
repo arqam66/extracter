@@ -143,11 +143,19 @@ function parseDuckDuckGoResults(html: string): { title: string; url: string; sni
   $(".result").each((_, el) => {
     const $el = $(el);
     const linkEl = $el.find("a.result__a").first();
-    const url = linkEl.attr("href") || "";
+    let url = linkEl.attr("href") || "";
     const title = linkEl.text().trim();
     const snippet = $el.find(".result__snippet").text().trim();
 
-    if (url && title) {
+    // Decode DuckDuckGo redirect URLs
+    if (url.includes("duckduckgo.com/l/?uddg=")) {
+      try {
+        const uddg = new URL(url, "https://duckduckgo.com").searchParams.get("uddg");
+        if (uddg) url = decodeURIComponent(uddg);
+      } catch { /* keep original */ }
+    }
+
+    if (url && !url.startsWith("//") && title) {
       results.push({ title, url, snippet });
     }
   });
@@ -350,7 +358,7 @@ const SKIP_DOMAINS = [
   "reddit.com", "quora.com", "medium.com", "wordpress.com", "blogspot.com",
   "aeroleads.com", "mustakbil.com", "techbehemoths.com", "scribd.com",
   "d7leadfinder.com", "businessbook.pk", "urdupoint.com", "contactout.com",
-  "pakistanembassy.dk", "pakbusinessworld.com",
+  "pakistanembassy.dk", "pakbusinessworld.com", "lookup.pk", "ypages.pk",
 ];
 
 function isBusinessResult(url: string): boolean {
