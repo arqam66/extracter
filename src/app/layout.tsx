@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BizIntel — Business Contact & Social Media Intelligence",
+  title: "Pakistan BizIntel — Business Intelligence & Contact Extraction",
   description:
-    "Instantly discover verified business contact details, social media profiles, and official online presence from a single search.",
+    "Extract verified business contacts, emails, phone numbers, and social media profiles across Pakistan — organized by city and industry.",
 };
 
 export default function RootLayout({

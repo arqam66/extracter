@@ -616,6 +616,23 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* ── Footer ──────────────────────────────────────────────────── */}
+      <footer className="footer">
+        <p style={{ margin: 0 }}>
+          Designed by{" "}
+          <a
+            href="https://github.com/arqam66/extracter"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            github.com/arqam66/extracter
+          </a>
+        </p>
+        <p style={{ margin: "6px 0 0", fontSize: "0.78rem" }}>
+          Pakistan BizIntel &mdash; Business Intelligence Platform
+        </p>
+      </footer>
     </div>
   );
 }
