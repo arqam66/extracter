@@ -16,6 +16,10 @@
 [![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma)](https://www.prisma.io)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss)](https://tailwindcss.com)
 
+### Live Demo
+
+**[https://extracterhazel.vercel.app/](https://extracterhazel.vercel.app/)**
+
 </div>
 
 ---
@@ -278,36 +282,37 @@ Here's how the entire system fits together — from the user clicking a button t
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        DATABASE                                     │
-│                   (SQLite + Prisma ORM)                              │
+│                     DEPLOYMENT ARCHITECTURE                          │
+│                    (Vercel + PostgreSQL)                              │
 │                                                                      │
-│   ┌─────────────────────────────┐  ┌─────────────────────────────┐  │
-│   │      BusinessProfile        │  │       SearchHistory         │  │
-│   │                             │  │                             │  │
-│   │  id                         │  │  id                         │  │
-│   │  companyName                │  │  query                      │  │
-│   │  officialWebsite            │  │  city                       │  │
-│   │  description                │  │  industry                   │  │
-│   │  industry ──────────────────│──│  status                     │  │
-│   │  city ──────────────────────│──│  createdAt                  │  │
-│   │  country ("Pakistan")       │  │  profileId ─────────────────│──│
-│   │  generalEmail               │  │                             │  │
-│   │  supportEmail               │  └─────────────────────────────┘  │
-│   │  salesEmail                 │                                   │
-│   │  officePhone                │  Indexes:                         │  │
-│   │  fullAddress                │  • city                           │  │
-│   │  facebook                   │  • industry                       │  │
-│   │  instagram                  │  • (city, industry) composite    │  │
-│   │  linkedin                   │  • country                        │  │
-│   │  twitter                    │                                   │
-│   │  youtube                    │                                   │
-│   │  confidenceScore            │                                   │
-│   │  verified                   │                                   │
-│   │  createdAt                  │                                   │
-│   │  updatedAt                  │                                   │
-│   └─────────────────────────────┘                                   │
+│   ┌──────────────────────────────────────────────────────────────┐  │
+│   │                    VERCEL PLATFORM                            │  │
+│   │                                                              │  │
+│   │   ┌──────────────────┐      ┌──────────────────────────┐    │  │
+│   │   │  Next.js App     │      │  Serverless Functions     │    │  │
+│   │   │  (SSR + Static)  │─────►│  /api/search              │    │  │
+│   │   │                  │      │  /api/stats               │    │  │
+│   │   │  Frontend: SSG   │      │  (auto-scaled, ephemeral) │    │  │
+│   │   └──────────────────┘      └────────────┬───────────────┘    │  │
+│   │                                          │                    │  │
+│   │                                          │  DATABASE_URL      │  │
+│   │                                          ▼                    │  │
+│   └──────────────────────────────────────────────────────────────┘  │
+│                           │                                          │
+│                           ▼                                          │
+│   ┌──────────────────────────────────────────────────────────────┐  │
+│   │              PostgreSQL DATABASE                              │  │
+│   │              (Vercel Postgres / Neon / Supabase)              │  │
+│   │                                                              │  │
+│   │   ┌─────────────────────┐  ┌─────────────────────────────┐  │  │
+│   │   │  BusinessProfile    │  │     SearchHistory           │  │  │
+│   │   │  (persistent data)  │  │     (search log)            │  │  │
+│   │   └─────────────────────┘  └─────────────────────────────┘  │  │
+│   └──────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Note:** SQLite is not supported on Vercel because serverless functions use an ephemeral, read-only filesystem. The application uses **PostgreSQL** instead, which persists data across function invocations.
 
 ---
 
@@ -925,10 +930,14 @@ This downloads all the required software packages. It may take a few minutes.
 
 ### Step 3: Set Up the Database
 
+For **local development** (SQLite):
+
 ```
 npx prisma generate
 npx prisma db push
 ```
+
+For **Vercel deployment** (PostgreSQL), see the [Deploying to Vercel](#deploying-to-vercel) section below.
 
 This creates the local database where all extracted business data will be stored.
 
@@ -944,6 +953,8 @@ Go to **http://localhost:3000** in your web browser. You'll see the Pakistan Biz
 
 ### For Production (Live Deployment)
 
+**Live:** [https://extracterhazel.vercel.app/](https://extracterhazel.vercel.app/)
+
 When you're ready to deploy for real use:
 
 ```
@@ -955,10 +966,51 @@ npm start
 
 ## Environment Variables
 
-**None needed.** The application works right out of the box:
-- The database is created automatically when you run the setup commands
-- No API keys or accounts are required
-- Search functionality works immediately
+For **local development**, the app works with SQLite out of the box (no env vars needed).
+
+For **Vercel deployment**, you need to set:
+
+| Variable | Where to Get It | Example |
+|----------|-----------------|---------|
+| `DATABASE_URL` | Vercel Postgres, Neon, or Supabase dashboard | `postgresql://user:pass@host:5432/dbname` |
+
+In Vercel: **Project Settings → Environment Variables → Add `DATABASE_URL`**
+
+---
+
+## Deploying to Vercel
+
+### Step 1: Create a PostgreSQL Database
+
+Choose one of these free options:
+- **[Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres)** — Built into Vercel, easiest setup
+- **[Neon](https://neon.tech)** — Free tier with 0.5GB storage
+- **[Supabase](https://supabase.com)** — Free tier with 500MB storage
+
+Copy the connection string from your database provider.
+
+### Step 2: Set Environment Variable in Vercel
+
+1. Go to your Vercel project dashboard
+2. Navigate to **Settings → Environment Variables**
+3. Add `DATABASE_URL` with your PostgreSQL connection string
+4. Select all environments (Production, Preview, Development)
+
+### Step 3: Push Database Schema
+
+Run locally with your Vercel database URL:
+
+```
+DATABASE_URL="your-postgres-url" npx prisma db push
+```
+
+### Step 4: Deploy
+
+```
+vercel --prod
+```
+
+Or push to your GitHub repository — Vercel auto-deploys on push.
 
 ---
 
@@ -978,16 +1030,17 @@ Yes. A developer can edit the city and industry lists in `src/lib/scraper.ts` an
 Same process as above — edit the `PAKISTAN_CITIES` array in both files.
 
 ### Can I change how many businesses are found per search?
-Yes. In `src/lib/scraper.ts`, find the line that says `allResults.slice(0, 8)` and change `8` to your preferred number. Higher numbers may slow down extraction.
+Yes. In `src/lib/scraper.ts`, find the line that says `allResults.slice(0, 6)` and change `6` to your preferred number. Higher numbers may slow down extraction.
 
 ### Can I change the cache duration?
 In `src/app/api/search/route.ts`, find the cache check that uses `24 * 60 * 60 * 1000` (24 hours in milliseconds) and change it to your preferred duration.
 
 ### What database does this use?
-**SQLite** — a lightweight, file-based database. The database file is stored at `prisma/dev.db`. No server setup required.
+- **Local development:** **SQLite** — a lightweight, file-based database. The database file is stored at `prisma/dev.db`. No server setup required.
+- **Vercel deployment:** **PostgreSQL** — required because Vercel's serverless functions use an ephemeral, read-only filesystem where SQLite cannot write. Use Vercel Postgres, Neon, or Supabase.
 
 ### Can I switch to a different database?
-Yes. Prisma supports PostgreSQL, MySQL, and others. Change the `provider` in `prisma/schema.prisma` and update the connection URL. You may need to install the corresponding database driver.
+Yes. Prisma supports PostgreSQL, MySQL, and others. Change the `provider` in `prisma/schema.prisma` and update the `DATABASE_URL` in your `.env` file. For Vercel, PostgreSQL is recommended since SQLite is not supported on serverless platforms.
 
 ---
 
@@ -997,7 +1050,7 @@ For developers who want to understand the codebase:
 
 | File | What It Does |
 |------|-------------|
-| `prisma/schema.prisma` | Defines the database structure (what data fields are stored) |
+| `prisma/schema.prisma` | Defines the database structure (PostgreSQL on Vercel, SQLite locally) |
 | `src/lib/scraper.ts` | The core engine — searches the internet, reads websites, extracts contact info |
 | `src/app/page.tsx` | The main user interface — dropdowns, buttons, results display, dashboard |
 | `src/components/SearchResult.tsx` | The business profile card — shows emails, phones, socials, confidence score |
