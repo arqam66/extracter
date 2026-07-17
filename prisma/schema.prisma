@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model BusinessProfile {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Basic Info
+  companyName   String
+  legalName     String?
+  brandName     String?
+  logoUrl       String?
+  tagline       String?
+  description   String?
+  industry      String?
+  category      String?
+  foundedYear   String?
+  employeeCount String?
+  headquarters  String?
+  companyType   String?
+
+  // Website
+  officialWebsite String?
+  contactPage     String?
+  aboutPage       String?
+  careersPage     String?
+  blogPage        String?
+
+  // Emails
+  generalEmail     String?
+  supportEmail     String?
+  salesEmail       String?
+  hrEmail          String?
+  careersEmail     String?
+  partnershipEmail String?
+  pressEmail       String?
+  billingEmail     String?
+
+  // Phones
+  officePhone   String?
+  mobilePhone   String?
+  tollFree      String?
+  whatsappPhone String?
+  faxNumber     String?
+
+  // Address
+  country    String?
+  state      String?
+  city       String?
+  street     String?
+  postalCode String?
+  fullAddress String?
+
+  // Social Media
+  facebook  String?
+  instagram String?
+  linkedin  String?
+  twitter   String?
+  tiktok    String?
+  youtube   String?
+  threads   String?
+  pinterest String?
+  snapchat  String?
+  reddit    String?
+  discord   String?
+  telegram  String?
+  whatsappChannel String?
+  medium    String?
+  github    String?
+
+  // Google Business
+  googleMapsLink String?
+  googlePlaceId  String?
+  googleRating   Float?
+  googleReviews  Int?
+  businessStatus String?
+  workingHours   String?
+
+  // Verification
+  confidenceScore Int      @default(0)
+  verified        Boolean  @default(false)
+
+  // Relations
+  searches SearchHistory[]
+
+  @@index([city])
+  @@index([industry])
+  @@index([city, industry])
+  @@index([country])
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  query     String
+  city      String?
+  industry  String?
+  status    String   @default("completed")
+
+  profileId String?
+  profile   BusinessProfile? @relation(fields: [profileId], references: [id])
+}
