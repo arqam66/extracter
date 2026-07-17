@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import SearchResult from "@/components/SearchResult";
+import SearchResult, { downloadAllPDF } from "@/components/SearchResult";
 
 const PAKISTAN_CITIES = [
   "Karachi",
@@ -466,7 +466,7 @@ export default function HomePage() {
             >
               {results.industry} in {results.city}
             </h2>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               {results.cached && (
                 <span
                   style={{
@@ -484,6 +484,29 @@ export default function HomePage() {
               <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                 {results.profiles.length} found
               </span>
+              <button
+                onClick={() => downloadAllPDF(results.profiles as any, results.city, results.industry)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  background: "var(--gradient-1)",
+                  color: "white",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Download All as PDF
+              </button>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -615,6 +638,45 @@ export default function HomePage() {
               </div>
             )}
           </div>
+
+          {/* Recent Extractions */}
+          {stats.totalSearches > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  fontFamily: "'Outfit', sans-serif",
+                  marginBottom: 12,
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Recent Extractions
+              </h3>
+              <div className="glass-card" style={{ padding: "16px 20px" }}>
+                {loadCache().map((entry, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "8px 0",
+                      borderBottom: idx < loadCache().length - 1 ? "1px solid var(--border)" : "none",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
+                      {entry.industry} in {entry.city}
+                    </span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {new Date(entry.timestamp).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
