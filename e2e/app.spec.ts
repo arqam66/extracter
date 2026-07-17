@@ -22,17 +22,26 @@ test.describe("Pakistan BizIntel", () => {
     await expect(page.locator("text=github.com/arqam66/extracter")).toBeVisible();
   });
 
-  test("city dropdown has all 11 Pakistani cities", async ({ page }) => {
+  test("city dropdown has all 53 Pakistani cities", async ({ page }) => {
     await page.goto("/");
 
     const citySelect = page.locator("select").nth(0);
     const options = citySelect.locator("option");
     const count = await options.count();
-    expect(count).toBe(12);
+    expect(count).toBe(54);
 
     const cities = [
       "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad",
-      "Multan", "Peshawar", "Quetta", "Sialkot", "Hyderabad", "Abbottabad",
+      "Multan", "Peshawar", "Quetta", "Sialkot", "Abbottabad",
+      "Gujranwala", "Bahawalpur", "Sargodha", "Sukkur", "Larkana",
+      "Mardan", "Mingora", "Nawabshah", "Bannu", "Dera Ghazi Khan",
+      "Dera Ismail Khan", "Gwadar", "Jacobabad", "Jhang", "Jhelum",
+      "Kohat", "Kotri", "Mianwali", "Mirpur", "Nowshera", "Okara",
+      "Rahim Yar Khan", "Shikarpur", "Swat", "Taxila", "Toba Tek Singh",
+      "Turbat", "Charsadda", "Chitral", "Daska", "Hafizabad",
+      "Haripur", "Kamoke", "Karak", "Khuzdar", "Lasbela",
+      "Mansehra", "Matiari", "Naushahro Feroze", "Qambar Shahdadkot",
+      "Sanghar", "Thatta", "Ziarat",
     ];
     for (const city of cities) {
       await expect(citySelect.locator(`option[value="${city}"]`)).toBeAttached();
