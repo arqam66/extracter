@@ -127,9 +127,10 @@ export async function POST(request: NextRequest) {
       totalFound: savedProfiles.length,
     });
   } catch (error) {
-    console.error("[Extract] Fatal error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Extract] Fatal error:", message);
     return NextResponse.json(
-      { error: "Extraction failed. Please try again." },
+      { error: `Extraction failed: ${message}. Please try again.` },
       { status: 500 }
     );
   }

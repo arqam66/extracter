@@ -1,4 +1,6 @@
 import * as cheerio from "cheerio";
+import https from "https";
+import http from "http";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface ScrapedProfile {
@@ -43,7 +45,16 @@ export interface ScrapedProfile {
 // ─── Constants ───────────────────────────────────────────────────────────────
 export const PAKISTAN_CITIES = [
   "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad",
-  "Multan", "Peshawar", "Quetta", "Sialkot", "Hyderabad", "Abbottabad",
+  "Multan", "Peshawar", "Quetta", "Sialkot", "Abbottabad",
+  "Gujranwala", "Bahawalpur", "Sargodha", "Sukkur", "Larkana",
+  "Mardan", "Mingora", "Nawabshah", "Bannu", "Dera Ghazi Khan",
+  "Dera Ismail Khan", "Gwadar", "Jacobabad", "Jhang", "Jhelum",
+  "Kohat", "Kotri", "Mianwali", "Mirpur", "Nowshera", "Okara",
+  "Rahim Yar Khan", "Shikarpur", "Swat", "Taxila", "Toba Tek Singh",
+  "Turbat", "Charsadda", "Chitral", "Daska", "Hafizabad",
+  "Haripur", "Kamoke", "Karak", "Khuzdar", "Lasbela",
+  "Mansehra", "Matiari", "Naushahro Feroze", "Qambar Shahdadkot",
+  "Sanghar", "Thatta", "Ziarat",
 ] as const;
 
 export const INDUSTRIES = [
@@ -71,55 +82,125 @@ const SOCIAL_PATTERNS: Record<string, RegExp> = {
   medium: /https?:\/\/(?:www\.)?medium\.com\/@?[A-Za-z0-9._\-]+\/?/gi,
 };
 
-// ─── Fetch ───────────────────────────────────────────────────────────────────
+// ─── Native HTTPS fetch ──────────────────────────────────────────────────────
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+function httpsGet(url: string, timeoutMs = 15000): Promise<{ status: number; data: string }> {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? https : http;
+    const req = mod.get(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      timeout: timeoutMs,
+    }, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        const redirectUrl = res.headers.location.startsWith("http")
+          ? res.headers.location
+          : new URL(res.headers.location, url).toString();
+        httpsGet(redirectUrl, timeoutMs).then(resolve).catch(reject);
+        return;
+      }
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => resolve({ status: res.statusCode || 0, data }));
+    });
+    req.on("timeout", () => { req.destroy(); reject(new Error("Request timed out")); });
+    req.on("error", reject);
+  });
+}
+
+// ─── Fetch a business page ──────────────────────────────────────────────────
 async function fetchPage(url: string): Promise<string | null> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-      redirect: "follow",
-    });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("text/html") && !ct.includes("text/plain")) return null;
-    return await res.text();
+    const { status, data } = await httpsGet(url, 10000);
+    if (status < 200 || status >= 400) return null;
+    if (data.includes("anomaly-modal") || data.includes("captcha")) return null;
+    return data;
   } catch {
     return null;
   }
 }
 
-// ─── DuckDuckGo search ──────────────────────────────────────────────────────
-async function searchDuckDuckGo(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+// ─── Brave Search ───────────────────────────────────────────────────────────
+async function searchBrave(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
   try {
     const encoded = encodeURIComponent(query);
-    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encoded}`, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-    });
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    const results: { title: string; url: string; snippet: string }[] = [];
-    $(".result").each((_, el) => {
-      const titleEl = $(el).find(".result__a");
-      const snippetEl = $(el).find(".result__snippet");
-      const href = titleEl.attr("href") || "";
-      let finalUrl = href;
-      if (href.includes("uddg=")) {
-        try { finalUrl = new URL(href, "https://duckduckgo.com").searchParams.get("uddg") || href; } catch { /* */ }
-      }
-      if (finalUrl && !finalUrl.includes("duckduckgo.com")) {
-        results.push({ title: titleEl.text().trim(), url: finalUrl, snippet: snippetEl.text().trim() });
-      }
-    });
-    return results.slice(0, 10);
+    const { status, data } = await httpsGet(`https://search.brave.com/search?q=${encoded}`, 20000);
+    if (status === 429) {
+      console.log("[Search] Brave rate-limited, retrying after delay...");
+      await new Promise((r) => setTimeout(r, 3000));
+      const retry = await httpsGet(`https://search.brave.com/search?q=${encoded}`, 20000);
+      if (retry.status !== 200) return [];
+      return parseBraveResults(retry.data);
+    }
+    if (status !== 200) return [];
+    return parseBraveResults(data);
   } catch {
     return [];
   }
+}
+
+function parseBraveResults(html: string): { title: string; url: string; snippet: string }[] {
+  if (html.includes("anomaly-modal") || html.includes("captcha")) return [];
+  const $ = cheerio.load(html);
+  const results: { title: string; url: string; snippet: string }[] = [];
+
+  $('div[data-type="web"]').each((_, el) => {
+    const $el = $(el);
+    const linkEl = $el.find('a[href^="http"]').first();
+    const url = linkEl.attr("href") || "";
+    const title = $el.find("div.title").text().trim();
+    const snippet = $el.find("div.generic-snippet").text().trim();
+
+    if (url && !url.includes("brave.com") && title) {
+      results.push({ title, url, snippet });
+    }
+  });
+
+  return results.slice(0, 10);
+}
+
+// ─── SearXNG fallback ──────────────────────────────────────────────────────
+const SEARXNG_INSTANCES = [
+  "https://search.sapti.me",
+  "https://searx.tiekoetter.com",
+  "https://search.ononoki.org",
+];
+
+async function searchSearxng(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+  for (const instance of SEARXNG_INSTANCES) {
+    try {
+      const encoded = encodeURIComponent(query);
+      const { status, data } = await httpsGet(`${instance}/search?q=${encoded}&format=json&categories=general`, 10000);
+      if (status === 200 && data.startsWith("{")) {
+        const json = JSON.parse(data);
+        if (json.results && json.results.length > 0) {
+          return json.results
+            .filter((r: { url: string; title: string }) => r.url && r.title)
+            .slice(0, 10)
+            .map((r: { title: string; url: string; content?: string }) => ({
+              title: r.title,
+              url: r.url,
+              snippet: r.content || "",
+            }));
+        }
+      }
+    } catch { /* try next instance */ }
+  }
+  return [];
+}
+
+async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const results = await searchBrave(query);
+    if (results.length > 0) return results;
+    await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  // Fallback to SearXNG
+  return searchSearxng(query);
 }
 
 // ─── Extract helpers ────────────────────────────────────────────────────────
@@ -230,6 +311,9 @@ const SKIP_DOMAINS = [
   "glassdoor.com", "indeed.com", "bloomberg.com", "zoominfo.com", "google.com",
   "mapquest.com", "yellowpages.com", "tripadvisor.com", "pinterest.com",
   "reddit.com", "quora.com", "medium.com", "wordpress.com", "blogspot.com",
+  "aeroleads.com", "mustakbil.com", "techbehemoths.com", "scribd.com",
+  "d7leadfinder.com", "businessbook.pk", "urdupoint.com", "contactout.com",
+  "pakistanembassy.dk", "pakbusinessworld.com",
 ];
 
 function isBusinessResult(url: string): boolean {
@@ -362,7 +446,7 @@ export async function extractByCityAndIndustry(
   const allResults: { title: string; url: string; snippet: string }[] = [];
   const seenUrls = new Set<string>();
 
-  const searchBatches = await Promise.allSettled(queries.map(q => searchDuckDuckGo(q)));
+  const searchBatches = await Promise.allSettled(queries.map(q => searchWeb(q)));
   for (const result of searchBatches) {
     if (result.status === "fulfilled") {
       for (const r of result.value) {

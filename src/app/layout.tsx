@@ -26,7 +26,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body style={{ fontFamily: "'Inter', 'Outfit', system-ui, sans-serif" }}>
+      <body style={{ fontFamily: "'Inter', 'Outfit', system-ui, sans-serif", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         {/* Background decoration */}
         <div
           className="floating-orb"
@@ -65,7 +65,7 @@ export default function RootLayout({
           style={{
             position: "relative",
             zIndex: 1,
-            minHeight: "100vh",
+            flex: 1,
             padding: "0 16px",
           }}
         >
