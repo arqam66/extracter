@@ -4,6 +4,12 @@ import { PAKISTAN_CITIES, INDUSTRIES } from "@/lib/scraper";
 
 export const maxDuration = 60;
 
+export async function GET() {
+  return NextResponse.json({
+    searches: [],
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

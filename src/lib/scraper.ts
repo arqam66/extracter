@@ -88,14 +88,18 @@ const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 function httpsGet(url: string, timeoutMs = 15000): Promise<{ status: number; data: string }> {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("https") ? https : http;
-    const req = mod.get(url, {
+    const options: any = {
       headers: {
         "User-Agent": USER_AGENT,
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
       timeout: timeoutMs,
-    }, (res) => {
+    };
+    if (url.startsWith("https")) {
+      options.rejectUnauthorized = false;
+    }
+    const req = mod.get(url, options, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         const redirectUrl = res.headers.location.startsWith("http")
           ? res.headers.location
@@ -264,7 +268,10 @@ function extractPhones(text: string): string[] {
   const pakMatches = text.match(PAK_PHONE_RE) || [];
   const generalMatches = text.match(PHONE_RE) || [];
   const all = [...pakMatches, ...generalMatches];
-  return [...new Set(all.map(p => p.trim()).filter(p => {
+  return [...new Set(all.map(p => {
+    let cleaned = p.trim().replace(/^[^0-9+]+|[^0-9]+$/g, ""); // Clean non-numeric/non-plus boundaries
+    return cleaned;
+  }).filter(p => {
     const digits = p.replace(/\D/g, "");
     return digits.length >= 7 && digits.length <= 15;
   }))];
@@ -363,7 +370,15 @@ const SKIP_DOMAINS = [
 
 function isBusinessResult(url: string): boolean {
   try {
-    const hostname = new URL(url).hostname.toLowerCase();
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.toLowerCase();
+    const pathname = urlObj.pathname.toLowerCase();
+
+    // Allow Google Maps or Google Business Profile links
+    if (hostname.includes("google.com") && (pathname.includes("/maps") || pathname.includes("/place") || hostname.startsWith("maps."))) {
+      return true;
+    }
+
     return !SKIP_DOMAINS.some(d => hostname.includes(d));
   } catch {
     return false;
@@ -372,7 +387,7 @@ function isBusinessResult(url: string): boolean {
 
 // ─── Scrape a single business ───────────────────────────────────────────────
 async function scrapeSingleBusiness(
-  companyName: string, websiteUrl: string, city: string, industry: string
+  companyName: string, websiteUrl: string, city: string, industry: string, snippet?: string
 ): Promise<ScrapedProfile> {
   const profile: ScrapedProfile = {
     companyName, officialWebsite: websiteUrl, description: null, logoUrl: null,
@@ -386,56 +401,178 @@ async function scrapeSingleBusiness(
   };
 
   let points = 0;
+  const isGoogleMaps = websiteUrl.includes("google.com/maps") || websiteUrl.includes("maps.google.com");
 
-  const pagesToCrawl = [
-    { url: websiteUrl, label: "Official Website", points: 20 },
-    { url: (() => { try { return new URL(websiteUrl).origin + "/contact"; } catch { return null; } })(), label: "Contact Page", points: 10 },
-    { url: (() => { try { return new URL(websiteUrl).origin + "/about"; } catch { return null; } })(), label: "About Page", points: 5 },
-    { url: (() => { try { return new URL(websiteUrl).origin + "/services"; } catch { return null; } })(), label: "Services Page", points: 3 },
-    { url: (() => { try { return new URL(websiteUrl).origin + "/team"; } catch { return null; } })(), label: "Team Page", points: 2 },
-  ];
+  if (isGoogleMaps) {
+    profile.sourcesChecked.push("Google Business Profile");
+    profile.officialWebsite = null; // Reset to null so we don't display Google Maps as the official website
+    points += 25; // Good starting confidence points for a verified Google listing
 
-  for (const page of pagesToCrawl) {
-    if (!page.url) continue;
-    const html = await fetchPage(page.url);
-    if (!html) continue;
+    // Clean up Google Maps title
+    const cleanName = companyName
+      .replace(/\s*-\s*Google\s*Maps/i, "")
+      .replace(/\s*\|\s*Google\s*Maps/i, "")
+      .trim();
+    profile.companyName = cleanName;
 
-    profile.sourcesChecked.push(page.label);
-    const $ = cheerio.load(html);
+    if (snippet) {
+      profile.description = snippet;
 
-    // Extract data from each page
-    const meta = extractMeta($);
-    if (meta.description && !profile.description) profile.description = meta.description;
-    if (meta.logoUrl && !profile.logoUrl) profile.logoUrl = meta.logoUrl;
+      // Extract phones from search snippet
+      const phonesInSnippet = extractPhones(snippet);
+      if (phonesInSnippet.length > 0) {
+        profile.phones.push(...phonesInSnippet);
+        points += 10;
+      }
 
-    const jsonLd = extractJsonLd($);
-    if (jsonLd.phone && !profile.officePhone) profile.phones.push(jsonLd.phone);
-    if (jsonLd.email) profile.emails.push(jsonLd.email);
-    if (jsonLd.address && !profile.fullAddress) profile.fullAddress = jsonLd.address;
-    if (jsonLd.founded && !profile.foundedYear) profile.foundedYear = jsonLd.founded;
-    if (jsonLd.employees && !profile.employeeCount) profile.employeeCount = jsonLd.employees;
-    if (jsonLd.facebook && !profile.facebook) profile.facebook = jsonLd.facebook;
-    if (jsonLd.instagram && !profile.instagram) profile.instagram = jsonLd.instagram;
-    if (jsonLd.linkedin && !profile.linkedin) profile.linkedin = jsonLd.linkedin;
-    if (jsonLd.twitter && !profile.twitter) profile.twitter = jsonLd.twitter;
-    if (jsonLd.youtube && !profile.youtube) profile.youtube = jsonLd.youtube;
+      // Extract emails from snippet
+      const emailsInSnippet = extractEmails(snippet);
+      if (emailsInSnippet.length > 0) {
+        profile.emails.push(...emailsInSnippet);
+        points += 10;
+      }
 
-    profile.emails.push(...extractEmails(html));
-    profile.phones.push(...extractPhones($("body").text()));
-
-    const socials = extractSocials(html);
-    for (const [key, val] of Object.entries(socials)) {
-      if (val && !profile[key as keyof ScrapedProfile]) {
-        (profile as unknown as Record<string, unknown>)[key] = val;
+      // Parse Address from snippet if snippet has location hints
+      const addrMatch = snippet.match(/(?:Plot|Office|Suite|Floor|Building|Tower|Centre|Center|Block|Sector|Phase|Area|Colony|Gulshan|DHA|Clifton|Gulberg|Johar|SITE|Saddar|Township|Road|Street)[^.!?|]{5,80}/i);
+      if (addrMatch) {
+        profile.fullAddress = addrMatch[0].trim();
+        points += 10;
       }
     }
 
-    if (!profile.fullAddress) {
-      const addr = extractAddress($, html);
-      if (addr) profile.fullAddress = addr;
+    // Attempt to search for the company's official website using the clean name
+    try {
+      const searchQuery = `"${cleanName}" ${city} Pakistan official website`;
+      const searchResults = await searchWeb(searchQuery);
+      let realWebsite: string | null = null;
+
+      for (const res of searchResults) {
+        if (isBusinessResult(res.url) && !res.url.includes("google.com")) {
+          realWebsite = res.url;
+          break;
+        }
+      }
+
+      if (realWebsite) {
+        profile.officialWebsite = realWebsite;
+        profile.sourcesChecked.push("Official Website (from GBP Search)");
+        points += 15;
+
+        // Scrape the found real website
+        const pagesToCrawl = [
+          { url: realWebsite, label: "Official Website", points: 15 },
+          { url: (() => { try { return new URL(realWebsite!).origin + "/contact"; } catch { return null; } })(), label: "Contact Page", points: 10 },
+          { url: (() => { try { return new URL(realWebsite!).origin + "/about"; } catch { return null; } })(), label: "About Page", points: 5 },
+        ];
+
+        for (const page of pagesToCrawl) {
+          if (!page.url) continue;
+          const html = await fetchPage(page.url);
+          if (!html) continue;
+
+          const $ = cheerio.load(html);
+
+          const meta = extractMeta($);
+          if (meta.description && !profile.description) profile.description = meta.description;
+          if (meta.logoUrl && !profile.logoUrl) profile.logoUrl = meta.logoUrl;
+
+          const jsonLd = extractJsonLd($);
+          if (jsonLd.phone) profile.phones.push(jsonLd.phone);
+          if (jsonLd.email) profile.emails.push(jsonLd.email);
+          if (jsonLd.address && !profile.fullAddress) profile.fullAddress = jsonLd.address;
+          if (jsonLd.facebook && !profile.facebook) profile.facebook = jsonLd.facebook;
+          if (jsonLd.instagram && !profile.instagram) profile.instagram = jsonLd.instagram;
+          if (jsonLd.linkedin && !profile.linkedin) profile.linkedin = jsonLd.linkedin;
+
+          // Extract mailto: and tel: links directly from the HTML anchors
+          $('a[href^="mailto:"]').each((_, el) => {
+            const mail = $(el).attr("href")?.replace(/^mailto:/i, "").trim().split("?")[0];
+            if (mail) profile.emails.push(mail);
+          });
+          $('a[href^="tel:"]').each((_, el) => {
+            const tel = $(el).attr("href")?.replace(/^tel:/i, "").trim().split("?")[0];
+            if (tel) profile.phones.push(tel);
+          });
+
+          profile.emails.push(...extractEmails(html));
+          profile.phones.push(...extractPhones($("body").text()));
+
+          // Socials from links
+          const socials = extractSocials(html);
+          for (const [key, val] of Object.entries(socials)) {
+            if (val && !profile[key as keyof ScrapedProfile]) {
+              (profile as unknown as Record<string, unknown>)[key] = val;
+            }
+          }
+          points += page.points;
+        }
+      }
+    } catch (e) {
+      console.error("[GBP Website Scrape] Failed:", e);
     }
 
-    points += page.points;
+  } else {
+    // Normal scraping for directly found websites
+    const pagesToCrawl = [
+      { url: websiteUrl, label: "Official Website", points: 20 },
+      { url: (() => { try { return new URL(websiteUrl).origin + "/contact"; } catch { return null; } })(), label: "Contact Page", points: 10 },
+      { url: (() => { try { return new URL(websiteUrl).origin + "/about"; } catch { return null; } })(), label: "About Page", points: 5 },
+      { url: (() => { try { return new URL(websiteUrl).origin + "/services"; } catch { return null; } })(), label: "Services Page", points: 3 },
+      { url: (() => { try { return new URL(websiteUrl).origin + "/team"; } catch { return null; } })(), label: "Team Page", points: 2 },
+    ];
+
+    for (const page of pagesToCrawl) {
+      if (!page.url) continue;
+      const html = await fetchPage(page.url);
+      if (!html) continue;
+
+      profile.sourcesChecked.push(page.label);
+      const $ = cheerio.load(html);
+
+      // Extract data from each page
+      const meta = extractMeta($);
+      if (meta.description && !profile.description) profile.description = meta.description;
+      if (meta.logoUrl && !profile.logoUrl) profile.logoUrl = meta.logoUrl;
+
+      const jsonLd = extractJsonLd($);
+      if (jsonLd.phone && !profile.officePhone) profile.phones.push(jsonLd.phone);
+      if (jsonLd.email) profile.emails.push(jsonLd.email);
+      if (jsonLd.address && !profile.fullAddress) profile.fullAddress = jsonLd.address;
+      if (jsonLd.founded && !profile.foundedYear) profile.foundedYear = jsonLd.founded;
+      if (jsonLd.employees && !profile.employeeCount) profile.employeeCount = jsonLd.employees;
+      if (jsonLd.facebook && !profile.facebook) profile.facebook = jsonLd.facebook;
+      if (jsonLd.instagram && !profile.instagram) profile.instagram = jsonLd.instagram;
+      if (jsonLd.linkedin && !profile.linkedin) profile.linkedin = jsonLd.linkedin;
+      if (jsonLd.twitter && !profile.twitter) profile.twitter = jsonLd.twitter;
+      if (jsonLd.youtube && !profile.youtube) profile.youtube = jsonLd.youtube;
+
+      // Extract mailto: and tel: links directly from the HTML anchors
+      $('a[href^="mailto:"]').each((_, el) => {
+        const mail = $(el).attr("href")?.replace(/^mailto:/i, "").trim().split("?")[0];
+        if (mail) profile.emails.push(mail);
+      });
+      $('a[href^="tel:"]').each((_, el) => {
+        const tel = $(el).attr("href")?.replace(/^tel:/i, "").trim().split("?")[0];
+        if (tel) profile.phones.push(tel);
+      });
+
+      profile.emails.push(...extractEmails(html));
+      profile.phones.push(...extractPhones($("body").text()));
+
+      const socials = extractSocials(html);
+      for (const [key, val] of Object.entries(socials)) {
+        if (val && !profile[key as keyof ScrapedProfile]) {
+          (profile as unknown as Record<string, unknown>)[key] = val;
+        }
+      }
+
+      if (!profile.fullAddress) {
+        const addr = extractAddress($, html);
+        if (addr) profile.fullAddress = addr;
+      }
+
+      points += page.points;
+    }
   }
 
   // Deduplicate
@@ -497,9 +634,12 @@ export async function extractByCityAndIndustry(
     if (result.status === "fulfilled") {
       for (const r of result.value) {
         try {
-          const hostname = new URL(r.url).hostname;
-          if (!seenUrls.has(hostname) && isBusinessResult(r.url)) {
-            seenUrls.add(hostname);
+          const urlObj = new URL(r.url);
+          const isGoogle = urlObj.hostname.toLowerCase().includes("google.com");
+          const dedupKey = isGoogle ? r.url : urlObj.hostname;
+
+          if (!seenUrls.has(dedupKey) && isBusinessResult(r.url)) {
+            seenUrls.add(dedupKey);
             allResults.push(r);
           }
         } catch { continue; }
@@ -508,12 +648,12 @@ export async function extractByCityAndIndustry(
   }
 
   const profiles: ScrapedProfile[] = [];
-  const toScrape = allResults.slice(0, 10);
+  const toScrape = allResults.slice(0, 12); // Slightly larger slice to allow more results including Google Maps
 
   const scrapeResults = await Promise.allSettled(
     toScrape.map(async (result) => {
       const name = extractBusinessName(result.title, result.snippet);
-      return scrapeSingleBusiness(name, result.url, city, industry);
+      return scrapeSingleBusiness(name, result.url, city, industry, result.snippet);
     })
   );
 
