@@ -95,56 +95,11 @@ const SOCIAL_PATTERNS: Record<string, RegExp> = {
     /https?:\/\/(?:www\.)?medium\.com\/@?[A-Za-z0-9._\-]+\/?/gi,
 };
 
-// ─── Search via DuckDuckGo HTML ─────────────────────────────────────────────
-async function searchDuckDuckGo(
-  query: string
-): Promise<{ title: string; url: string; snippet: string }[]> {
-  const encoded = encodeURIComponent(query);
-  const url = `https://html.duckduckgo.com/html/?q=${encoded}`;
-
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    },
-  });
-
-  const html = await res.text();
-  const $ = cheerio.load(html);
-  const results: { title: string; url: string; snippet: string }[] = [];
-
-  $(".result").each((_, el) => {
-    const titleEl = $(el).find(".result__a");
-    const snippetEl = $(el).find(".result__snippet");
-    const href = titleEl.attr("href") || "";
-
-    let finalUrl = href;
-    if (href.includes("uddg=")) {
-      try {
-        const parsed = new URL(href, "https://duckduckgo.com");
-        finalUrl = parsed.searchParams.get("uddg") || href;
-      } catch {
-        finalUrl = href;
-      }
-    }
-
-    if (finalUrl && !finalUrl.includes("duckduckgo.com")) {
-      results.push({
-        title: titleEl.text().trim(),
-        url: finalUrl,
-        snippet: snippetEl.text().trim(),
-      });
-    }
-  });
-
-  return results.slice(0, 10);
-}
-
-// ─── Fetch & parse a page ────────────────────────────────────────────────────
+// ─── Fetch with timeout (8s) ────────────────────────────────────────────────
 async function fetchPage(url: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch(url, {
       signal: controller.signal,
@@ -168,6 +123,56 @@ async function fetchPage(url: string): Promise<string | null> {
   }
 }
 
+// ─── DuckDuckGo search ──────────────────────────────────────────────────────
+async function searchDuckDuckGo(
+  query: string
+): Promise<{ title: string; url: string; snippet: string }[]> {
+  try {
+    const encoded = encodeURIComponent(query);
+    const url = `https://html.duckduckgo.com/html/?q=${encoded}`;
+
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const results: { title: string; url: string; snippet: string }[] = [];
+
+    $(".result").each((_, el) => {
+      const titleEl = $(el).find(".result__a");
+      const snippetEl = $(el).find(".result__snippet");
+      const href = titleEl.attr("href") || "";
+
+      let finalUrl = href;
+      if (href.includes("uddg=")) {
+        try {
+          const parsed = new URL(href, "https://duckduckgo.com");
+          finalUrl = parsed.searchParams.get("uddg") || href;
+        } catch {
+          finalUrl = href;
+        }
+      }
+
+      if (finalUrl && !finalUrl.includes("duckduckgo.com")) {
+        results.push({
+          title: titleEl.text().trim(),
+          url: finalUrl,
+          snippet: snippetEl.text().trim(),
+        });
+      }
+    });
+
+    return results.slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
+// ─── Extract helpers ────────────────────────────────────────────────────────
 function extractEmails(text: string): string[] {
   const matches = text.match(EMAIL_RE) || [];
   const clean = matches
@@ -179,7 +184,9 @@ function extractEmails(text: string): string[] {
         !e.endsWith(".svg") &&
         !e.includes("example.com") &&
         !e.includes("sentry") &&
-        !e.includes("webpack")
+        !e.includes("webpack") &&
+        !e.includes("wixpress") &&
+        !e.includes("sentry.io")
     );
   return [...new Set(clean)];
 }
@@ -192,9 +199,7 @@ function extractPhones(text: string): string[] {
   return [...new Set(clean)];
 }
 
-function extractSocials(
-  html: string
-): Record<string, string | null> {
+function extractSocials(html: string): Record<string, string | null> {
   const result: Record<string, string | null> = {};
   for (const [platform, pattern] of Object.entries(SOCIAL_PATTERNS)) {
     const match = html.match(pattern);
@@ -207,40 +212,32 @@ function extractSocials(
   return result;
 }
 
-function extractMeta(
-  $: cheerio.CheerioAPI
-): { description: string | null; logoUrl: string | null } {
+function extractMeta($: cheerio.CheerioAPI) {
   const description =
     $('meta[name="description"]').attr("content") ||
     $('meta[property="og:description"]').attr("content") ||
     null;
-
   const logoUrl =
     $('meta[property="og:image"]').attr("content") ||
     $('link[rel="icon"]').attr("href") ||
     null;
-
   return { description, logoUrl };
 }
 
-// ─── Extract business name from search result title ──────────────────────────
+// ─── Extract business name from title ───────────────────────────────────────
 function extractBusinessName(title: string, snippet: string): string {
-  // Remove common suffixes like " - Home", " | Official Site", etc.
   let name = title
     .replace(/\s*[-|–]\s*(Home|Official|Website|Contact|About).*$/i, "")
     .replace(/\s*\|\s*.*$/i, "")
     .replace(/\s*-\s*.*$/i, "")
     .trim();
-
-  // If name is too short, try snippet
   if (name.length < 3) {
     name = snippet.split(/[.\n]/)[0].trim();
   }
-
   return name || title;
 }
 
-// ─── Filter out non-business results ─────────────────────────────────────────
+// ─── Filter non-business domains ────────────────────────────────────────────
 const SKIP_DOMAINS = [
   "facebook.com",
   "instagram.com",
@@ -271,7 +268,7 @@ function isBusinessResult(url: string): boolean {
   }
 }
 
-// ─── Scrape a single business profile ────────────────────────────────────────
+// ─── Scrape a single business ───────────────────────────────────────────────
 async function scrapeSingleBusiness(
   companyName: string,
   websiteUrl: string,
@@ -338,15 +335,10 @@ async function scrapeSingleBusiness(
       const contactHtml = await fetchPage(contactUrl);
       if (contactHtml) {
         profile.sourcesChecked.push("Contact Page");
-        const contactEmails = extractEmails(contactHtml);
-        const contactPhones = extractPhones(
-          cheerio.load(contactHtml)("body").text()
-        );
-        profile.emails.push(...contactEmails);
-        profile.phones.push(...contactPhones);
-
-        const contactSocials = extractSocials(contactHtml);
-        for (const [key, val] of Object.entries(contactSocials)) {
+        profile.emails.push(...extractEmails(contactHtml));
+        profile.phones.push(...extractPhones(cheerio.load(contactHtml)("body").text()));
+        const cs = extractSocials(contactHtml);
+        for (const [key, val] of Object.entries(cs)) {
           if (val && !profile[key as keyof ScrapedProfile]) {
             (profile as unknown as Record<string, unknown>)[key] = val;
           }
@@ -364,11 +356,9 @@ async function scrapeSingleBusiness(
       const aboutHtml = await fetchPage(aboutUrl);
       if (aboutHtml) {
         profile.sourcesChecked.push("About Page");
-        const aboutEmails = extractEmails(aboutHtml);
-        profile.emails.push(...aboutEmails);
-
-        const aboutSocials = extractSocials(aboutHtml);
-        for (const [key, val] of Object.entries(aboutSocials)) {
+        profile.emails.push(...extractEmails(aboutHtml));
+        const as = extractSocials(aboutHtml);
+        for (const [key, val] of Object.entries(as)) {
           if (val && !profile[key as keyof ScrapedProfile]) {
             (profile as unknown as Record<string, unknown>)[key] = val;
           }
@@ -390,21 +380,11 @@ async function scrapeSingleBusiness(
     points += 15;
     for (const email of profile.emails) {
       const lower = email.toLowerCase();
-      if (
-        lower.startsWith("info@") ||
-        lower.startsWith("contact@") ||
-        lower.startsWith("hello@")
-      ) {
+      if (lower.startsWith("info@") || lower.startsWith("contact@") || lower.startsWith("hello@")) {
         profile.generalEmail = email;
-      } else if (
-        lower.startsWith("support@") ||
-        lower.startsWith("help@")
-      ) {
+      } else if (lower.startsWith("support@") || lower.startsWith("help@")) {
         profile.supportEmail = email;
-      } else if (
-        lower.startsWith("sales@") ||
-        lower.startsWith("business@")
-      ) {
+      } else if (lower.startsWith("sales@") || lower.startsWith("business@")) {
         profile.salesEmail = email;
       } else if (!profile.generalEmail) {
         profile.generalEmail = email;
@@ -417,61 +397,52 @@ async function scrapeSingleBusiness(
     points += 10;
   }
 
-  const socials = [
-    "facebook",
-    "instagram",
-    "linkedin",
-    "twitter",
-    "youtube",
-    "tiktok",
-  ];
-  const foundSocials = socials.filter(
-    (s) => profile[s as keyof ScrapedProfile]
-  );
+  const socials = ["facebook", "instagram", "linkedin", "twitter", "youtube", "tiktok"];
+  const foundSocials = socials.filter((s) => profile[s as keyof ScrapedProfile]);
   points += Math.min(foundSocials.length * 5, 25);
 
   profile.confidenceScore = Math.min(points, 100);
-
   return profile;
 }
 
-// ─── Main: Extract businesses by city + industry ─────────────────────────────
+// ─── Main extraction function ───────────────────────────────────────────────
 export async function extractByCityAndIndustry(
   city: string,
   industry: string
 ): Promise<ScrapedProfile[]> {
-  // Build multiple search queries for better coverage
+  // Run 2 searches (not 3) to be faster
   const queries = [
-    `${industry} companies in ${city} Pakistan`,
-    `${industry} suppliers ${city} Pakistan contact`,
-    `${industry} businesses ${city} Pakistan`,
+    `${industry} companies in ${city} Pakistan contact`,
+    `${industry} suppliers ${city} Pakistan`,
   ];
 
   const allResults: { title: string; url: string; snippet: string }[] = [];
   const seenUrls = new Set<string>();
 
   // Run searches in parallel
-  const searchBatches = await Promise.all(
+  const searchBatches = await Promise.allSettled(
     queries.map((q) => searchDuckDuckGo(q))
   );
 
-  for (const results of searchBatches) {
-    for (const r of results) {
-      try {
-        const hostname = new URL(r.url).hostname;
-        if (!seenUrls.has(hostname) && isBusinessResult(r.url)) {
-          seenUrls.add(hostname);
-          allResults.push(r);
+  for (const result of searchBatches) {
+    if (result.status === "fulfilled") {
+      for (const r of result.value) {
+        try {
+          const hostname = new URL(r.url).hostname;
+          if (!seenUrls.has(hostname) && isBusinessResult(r.url)) {
+            seenUrls.add(hostname);
+            allResults.push(r);
+          }
+        } catch {
+          continue;
         }
-      } catch {
-        continue;
       }
     }
   }
 
-  // Scrape each business (limit to 8 to avoid timeouts)
+  // Scrape each business (limit to 5 for speed)
   const profiles: ScrapedProfile[] = [];
-  const toScrape = allResults.slice(0, 8);
+  const toScrape = allResults.slice(0, 5);
 
   const scrapeResults = await Promise.allSettled(
     toScrape.map(async (result) => {
@@ -486,8 +457,6 @@ export async function extractByCityAndIndustry(
     }
   }
 
-  // Sort by confidence score descending
   profiles.sort((a, b) => b.confidenceScore - a.confidenceScore);
-
   return profiles;
 }
