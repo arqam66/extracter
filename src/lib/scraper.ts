@@ -124,31 +124,30 @@ async function fetchPage(url: string): Promise<string | null> {
   }
 }
 
-// ─── Google Search ─────────────────────────────────────────────────────────
-async function searchGoogle(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+// ─── DuckDuckGo Search ─────────────────────────────────────────────────────
+async function searchDuckDuckGo(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
   try {
     const encoded = encodeURIComponent(query);
-    const { status, data } = await httpsGet(`https://www.google.com/search?q=${encoded}&num=10&hl=en`, 20000);
+    const { status, data } = await httpsGet(`https://html.duckduckgo.com/html/?q=${encoded}`, 20000);
     if (status !== 200) return [];
-    return parseGoogleResults(data);
+    return parseDuckDuckGoResults(data);
   } catch {
     return [];
   }
 }
 
-function parseGoogleResults(html: string): { title: string; url: string; snippet: string }[] {
-  if (html.includes("unusual traffic") || html.includes("captcha")) return [];
+function parseDuckDuckGoResults(html: string): { title: string; url: string; snippet: string }[] {
   const $ = cheerio.load(html);
   const results: { title: string; url: string; snippet: string }[] = [];
 
-  $("div.g, div[data-hveid]").each((_, el) => {
+  $(".result").each((_, el) => {
     const $el = $(el);
-    const linkEl = $el.find("a[href^='http']").first();
+    const linkEl = $el.find("a.result__a").first();
     const url = linkEl.attr("href") || "";
-    const title = $el.find("h3").first().text().trim();
-    const snippet = $el.find("div[data-sncf], span.aCOpRe, div.VwiC3b").first().text().trim();
+    const title = linkEl.text().trim();
+    const snippet = $el.find(".result__snippet").text().trim();
 
-    if (url && !url.includes("google.com") && title) {
+    if (url && title) {
       results.push({ title, url, snippet });
     }
   });
@@ -226,9 +225,9 @@ async function searchSearxng(query: string): Promise<{ title: string; url: strin
 }
 
 async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
-  // Google first
-  const googleResults = await searchGoogle(query);
-  if (googleResults.length > 0) return googleResults;
+  // DuckDuckGo first (scrape-friendly)
+  const ddgResults = await searchDuckDuckGo(query);
+  if (ddgResults.length > 0) return ddgResults;
 
   // Brave fallback
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -479,6 +478,7 @@ export async function extractByCityAndIndustry(
     `${industry} companies in ${city} Pakistan contact email phone`,
     `${industry} suppliers ${city} Pakistan website`,
     `${industry} businesses directory ${city} Pakistan`,
+    `${industry} ${city} Pakistan email phone address`,
   ];
 
   const allResults: { title: string; url: string; snippet: string }[] = [];
@@ -500,7 +500,7 @@ export async function extractByCityAndIndustry(
   }
 
   const profiles: ScrapedProfile[] = [];
-  const toScrape = allResults.slice(0, 6);
+  const toScrape = allResults.slice(0, 10);
 
   const scrapeResults = await Promise.allSettled(
     toScrape.map(async (result) => {
